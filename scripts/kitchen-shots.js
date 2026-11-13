@@ -4,6 +4,7 @@
 //   kitchen-02-working.png   several cooks busy, including a /code-review with helpers
 //   kitchen-03-headchef.png  close-up of the pass (head chef)
 //   kitchen-04-trips.png     cooks at pantry, station (chop) and stove at once
+//   kitchen-05-tickets.png   pass rail with pending, in-progress and done tickets
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -120,6 +121,33 @@ const FAKE = makeFakeClaudeDir();
     }, null, { timeout: 25000 });
     await sleep(800);
     await shot('kitchen-04-trips.png');
+
+    // 05: order tickets on the pass: pending, in progress, and done (plated)
+    await page.evaluate(() => {
+      window.harness.select(null);
+      for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id });
+    });
+    await sleep(6000);
+    await sendTo('Linus', 'browse the stock list');
+    await sendTo('Linus', 'and then check the dessert menu');
+    await sendTo('Linus', 'please also taste the consomme');
+    await sendTo('Grace', 'chop the garnish');
+    await sendTo('Alan', 'stir the reduction');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => {
+      const t = window.harness.tickets();
+      return t.some((x) => x.state === 'progress') && t.some((x) => x.state === 'pending');
+    }, null, { timeout: 20000 });
+    await sendTo('Ada', 'ready the tasting plate');
+    await sendTo('Ken', 'ready the soup');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => {
+      const t = window.harness.tickets(), s = new Set(t.map((x) => x.state));
+      return s.has('pending') && s.has('progress') && t.filter((x) => x.state === 'done').length >= 2;
+    }, null, { timeout: 15000 });
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
+    await sleep(400);
+    await shot('kitchen-05-tickets.png');
   } finally {
     await browser.close(); srv.kill();
   }

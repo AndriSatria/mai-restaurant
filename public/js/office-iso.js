@@ -424,15 +424,8 @@
     // a finished plate on the board
     const pl = A(8.4, 0.77, DESKZ);
     disc(c, pl[0], pl[1], 4, '#f0eee8'); disc(c, pl[0], pl[1], 3, '#fff'); disc(c, pl[0], pl[1], 1, st === 'working' ? '#c84830' : '#d8d0c0');
-    // ticket rail along the back, tickets hang toward the camera. Colours mark open orders.
+    // ticket rail along the back; live order tickets are drawn each frame (see drawTickets)
     box(c, 7.4, 0.08, 8.95, 0.2, DESKZ, DESKZ + 2, { top: '#3a4048', se: '#1a1e24', sw: '#2a2e36' });
-    const tickets = [['#f5c542', 7.5], ['#ff8b8f', 7.85], ['#8fb8ff', 8.2], ['#6be39b', 8.55]];
-    tickets.forEach(([col, x], i) => {
-      const drop = (st === 'working' && Math.floor(t * 4 + i) % 5 === 0) ? 0.04 : 0;
-      box(c, x, 0.14, x + 0.28, 0.22, DESKZ + 2, DESKZ + 9 - drop * 10, { top: col, se: shade(col, -40), sw: shade(col, -18) });
-      const tp = A(x + 0.14, 0.2, DESKZ + 6);
-      R(c, tp[0] - 1, tp[1], 3, 1, shade(col, -50));
-    });
     // heat lamp bar over the plate (glows when the pass is busy)
     box(c, 7.95, 0.48, 8.9, 0.58, DESKZ + 14, DESKZ + 16, { top: '#3a4048', se: '#1a1e24', sw: '#2a2e36' });
     const hl = A(8.4, 0.53, DESKZ + 14);
@@ -907,7 +900,35 @@
     else for (let i = 0; i < 3; i++) { const f = (t * 2 + i * 0.33) % 1; c.globalAlpha = 1 - f; R(c, x - 12 + i * 12, y - 15 - Math.round(f * 3), 2, 2, '#ffd84a'); c.globalAlpha = 1; }
   }
 
+
+  /** Live order tickets hanging from the pass rail. Returns logical-space hit boxes. */
+  function drawTickets(c, tickets, t) {
+    const hits = [];
+    if (!tickets || !tickets.length) return hits;
+    const n = tickets.length, w = 0.17, gap = 0.03, total = n * w + (n - 1) * gap;
+    const x0 = 7.46 + Math.max(0, (1.44 - total) / 2);
+    tickets.forEach((tk, i) => {
+      const x = x0 + i * (w + gap), y = 0.14;
+      const drop = tk.state === 'progress' && Math.floor(t * 5 + i) % 4 === 0 ? 0.03 : 0;
+      const z1 = DESKZ + 2, z2 = DESKZ + (tk.state === 'done' ? 12 : 10) - drop * 8;
+      const col = tk.state === 'pending' ? '#f0d9a0' : tk.state === 'progress' ? '#ffc4b0' : '#b8e8c0';
+      box(c, x, y, x + w, y + 0.1, z1, z2, { top: col, se: shade(col, -40), sw: shade(col, -18) });
+      const pin = A(x + w / 2, y + 0.05, z2);
+      R(c, pin[0] - 1, pin[1], 2, 1, '#3a4048');
+      if (tk.state === 'done') {
+        const pl = A(x + w / 2, y + 0.08, z1 + 4);
+        disc(c, pl[0], pl[1], 3, '#f0eee8'); disc(c, pl[0], pl[1], 2, '#fff'); disc(c, pl[0], pl[1], 1, '#c84830');
+      }
+      const corners = [A(x, y, z2), A(x + w, y, z2), A(x, y + 0.1, z1), A(x + w, y + 0.1, z1)];
+      const lx = Math.min(...corners.map((p) => p[0])) - 1, rx = Math.max(...corners.map((p) => p[0])) + 1;
+      const ty = Math.min(...corners.map((p) => p[1])) - 1, by = Math.max(...corners.map((p) => p[1])) + 1;
+      hits.push({ id: tk.id, name: tk.name, text: tk.text, state: tk.state, ax: (lx + rx) / 2, head: ty, x: lx, y: ty, w: rx - lx, h: by - ty });
+    });
+    return hits;
+  }
+
   // ---------- main ----------
+  let lastTicketHits = [];
   const bg = buildBackground();
   const logical = mk(W, H), lc = logical.getContext('2d');
   const labelPt = (e) => { const s = SLOTS[e.slot !== undefined ? e.slot : e.i]; return [sx(s.lab.x, s.lab.y), sy(s.lab.x, s.lab.y, 0) + 6]; };
@@ -1008,6 +1029,8 @@
       lc.globalAlpha = 1;
     }
 
+    const ticketHits = drawTickets(lc, scene.tickets || [], t);
+
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1059,6 +1082,31 @@
       drawBubble(ctx, b.bub, cx, bottom, S, U, canvas.width);
     }
     for (const s of SLOTS) if (!bySlot[s.i] && scene.hoverSlot === s.i) { const lp = labelPt(s); pillText(ctx, '＋ hire', lp[0] * S, lp[1] * S, U, '#0e1f1a', '#5ff2a5', true); }
+    // compact column of order tickets, anchored just right of the rail so it clears the PASS sign and the chef
+    const tHits = [];
+    if (ticketHits.length) {
+      const u = U * 0.85, nh = Math.round(15 * u), gap = Math.round(2 * U);
+      const lines = ticketHits.map((tk) => tk.name + ': ' + tk.text);
+      const nw = Math.max(...lines.map((s) => measurePill(ctx, s, u, true)));
+      const hook = A(10.55, 0.55, 24);
+      const colRight = Math.min(canvas.width - 4, hook[0] * S + nw * 0.2);
+      const cx = colRight - nw / 2;
+      let cy = hook[1] * S + nh / 2 + 4 * U;
+      for (let i = 0; i < ticketHits.length; i++) {
+        const tk = ticketHits[i];
+        const fg = tk.state === 'pending' ? '#2a1f00' : tk.state === 'progress' ? '#2a1008' : '#0e2a1a';
+        const bg = tk.state === 'pending' ? '#f0d9a0' : tk.state === 'progress' ? '#ffc4b0' : '#b8e8c0';
+        pillText(ctx, lines[i], cx, cy, u, fg, bg, true);
+        if (tk.state === 'done') { // plated dish on a finished ticket
+          const px = Math.round(cx - nw / 2 + 5 * u), py = Math.round(cy);
+          ctx.fillStyle = '#f0eee8'; ctx.beginPath(); ctx.arc(px, py, Math.max(2, 3.2 * u), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#c84830'; ctx.beginPath(); ctx.arc(px, py, Math.max(1, 1.5 * u), 0, Math.PI * 2); ctx.fill();
+        }
+        tHits.push({ id: tk.id, x: (cx - nw / 2) / S, y: (cy - nh / 2) / S, w: nw / S, h: nh / S, name: tk.name, state: tk.state });
+        cy += nh + gap;
+      }
+    }
+    lastTicketHits = tHits;
   }
 
   /** logical-pixel hit test: front-most object first (same order as drawing). -> {id} | {slot} | null */
@@ -1069,7 +1117,7 @@
   }
 
   window.OfficeIso = {
-    W, H, SLOTS, MAX_SLOTS, render, hitTest, walkPath, SPOTS, SPEED, STEP: 1,
+    W, H, SLOTS, MAX_SLOTS, render, hitTest, ticketHits: () => lastTicketHits, walkPath, SPOTS, SPEED, STEP: 1,
     drawAvatar: F.drawAvatar, GX, GY, isBlocked, project: (x, y, z) => [sx(x, y), sy(x, y, z || 0)],
     deskPoint: (slot) => { const s = SLOTS[slot]; return [sx(s.desk.x, s.desk.y), sy(s.desk.x, s.desk.y, DESKZ)]; },
     TABLE, SEATS, MGR, MD, COUNTER, PLANTS, tablePoint: () => [sx(TABLE.x, TABLE.y), sy(TABLE.x, TABLE.y, TABLE.h)],

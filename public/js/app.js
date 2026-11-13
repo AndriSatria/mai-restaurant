@@ -605,11 +605,22 @@
     const r = canvas.getBoundingClientRect();
     return [((ev.clientX - r.left) / r.width) * Office.W, ((ev.clientY - r.top) / r.height) * Office.H];
   }
+  function hitTicket(lx, ly) {
+    const list = Office.ticketHits && Office.ticketHits();
+    if (!list) return null;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const t = list[i];
+      if (lx >= t.x && lx <= t.x + t.w && ly >= t.y && ly <= t.y + t.h) return t;
+    }
+    return null;
+  }
   canvas.addEventListener('mousemove', (ev) => {
-    const [x, y] = toLogical(ev); const h = Office.hitTest(x, y, entries());
+    const [x, y] = toLogical(ev);
+    const tk = hitTicket(x, y);
+    const h = tk ? { id: tk.id } : Office.hitTest(x, y, entries());
     hoverId = h && h.id || null; hoverSlot = h && h.slot !== undefined && agents.size < Office.MAX_SLOTS ? h.slot : null;
     canvas.style.cursor = h ? 'pointer' : 'default';
-    canvas.title = hoverId ? tooltip(agents.get(hoverId)) : '';
+    canvas.title = tk ? (tk.name + ' · ' + tk.state) : (hoverId ? tooltip(agents.get(hoverId)) : '');
   });
   function tooltip(a) {
     if (!a) return '';
@@ -621,7 +632,10 @@
   }
   canvas.addEventListener('mouseleave', () => { hoverId = null; hoverSlot = null; });
   canvas.addEventListener('click', (ev) => {
-    const [x, y] = toLogical(ev); const h = Office.hitTest(x, y, entries());
+    const [x, y] = toLogical(ev);
+    const tk = hitTicket(x, y);
+    if (tk) { select(tk.id); return; }
+    const h = Office.hitTest(x, y, entries());
     if (!h) { return; }
     if (h.id) select(h.id); else if (agents.size < Office.MAX_SLOTS) openHire(h.slot);
   });
@@ -775,6 +789,48 @@
     }
   }
 
+  // order tickets on the pass: one per prompt, derived from transcript + run state
+  const TICKET_DONE_MS = 5500, TICKET_MAX = 8;
+  const ticketDone = [];
+  const ticketWas = new Map();
+  function clipPrompt(s) {
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    if (s.length <= 28) return s;
+    const cut = s.slice(0, 27).replace(/\s+\S*$/, '');
+    return (cut || s.slice(0, 27)) + '…';
+  }
+  function collectTickets(now) {
+    const pending = [], progress = [], live = new Set();
+    for (const a of agents.values()) {
+      const users = (a.transcript || []).filter((m) => m.role === 'user');
+      const q = a.queued || 0;
+      const busy = a.state === 'thinking' || a.state === 'working';
+      if (q) for (const m of users.slice(-q)) {
+        pending.push({ id: a.id, mid: m.mid, name: a.name, text: clipPrompt(m.text), state: 'pending' });
+        live.add(a.id + ':' + m.mid);
+      }
+      const cur = users[users.length - 1 - q];
+      if (cur && busy) {
+        const row = { id: a.id, mid: cur.mid, name: a.name, text: clipPrompt(cur.text), state: 'progress' };
+        progress.push(row); live.add(a.id + ':' + cur.mid);
+        ticketWas.set(a.id, { mid: cur.mid, name: a.name, text: row.text });
+      } else {
+        const prev = ticketWas.get(a.id);
+        if (prev) { ticketDone.push({ id: a.id, mid: prev.mid, name: prev.name, text: prev.text, state: 'done', doneAt: now }); ticketWas.delete(a.id); }
+      }
+    }
+    for (let i = ticketDone.length - 1; i >= 0; i--) {
+      const d = ticketDone[i];
+      if (now - d.doneAt > TICKET_DONE_MS * TS || live.has(d.id + ':' + d.mid)) ticketDone.splice(i, 1);
+    }
+    const all = progress.concat(pending, ticketDone);
+    while (all.length > TICKET_MAX) {
+      const i = all.findIndex((t) => t.state === 'done');
+      if (i >= 0) all.splice(i, 1); else all.shift();
+    }
+    return all;
+  }
+
   // ---------- main loop ----------
   function resize() {
     const stage = $('stage'); const dpr = window.devicePixelRatio || 1;
@@ -790,7 +846,7 @@
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     update(dt, now); updateHelp(now);
-    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now) });
+    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now) });
     requestAnimationFrame(frame);
   }
 
@@ -799,6 +855,8 @@
     agents, select, send, view: VIEW, get selected() { return selectedId; }, get hover() { return { id: hoverId, slot: hoverSlot }; },
     plan: () => { const o = planOwner(); return { owner: o ? o.id : null, state: o ? o.plan.state : null, summary: o ? o.plan.summary : null, seated: [...agents.values()].filter((a) => a.away && a.mode === 'meet').map((a) => a.id), walking: [...agents.values()].filter((a) => a.away && a.dest === 'meet' && a.mode === 'walk').map((a) => a.id) }; },
     toolTrip,
+    tickets: () => collectTickets(performance.now()),
+    ticketHits: () => (Office.ticketHits && Office.ticketHits()) || [],
     states: () => [...agents.values()].map((a) => ({ id: a.id, main: !!a.main, slot: a.slot, meet: a.away && a.mode === 'meet', dest: a.dest, name: a.name, type: a.type, state: a.state, tool: a.tool, x: a.x, y: a.y, away: a.away, mode: a.mode, act: a.act && a.act.kind, cook: a.cook || null, subs: (a.subs || []).length, helping: a.help ? a.help.phase : null, home: !a.away, seated: !a.away && a.mode === 'sit' })),
     help: (id) => { const a = agents.get(id); return a && a.help ? { phase: a.help.phase, parentId: a.help.parentId, role: a.help.role, label: a.help.label, tool: a.help.tool, say: a.help.say, x: a.x, y: a.y, mode: a.mode, away: a.away, seated: !a.away && a.mode === 'sit', peer: !!a.help.peer, tile: Math.floor(a.x) + ',' + Math.floor(a.y) } : null; },
     team: (id) => { const a = agents.get(id); return a ? a.team.slice() : []; },

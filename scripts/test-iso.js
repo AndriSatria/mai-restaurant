@@ -333,6 +333,49 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(trips.c.cook === 'stove' && trips.c.seated, 'stir (Bash) stays at the stove: ' + JSON.stringify(trips.c));
     assert(trips.uniq === trips.pos.length, 'cooks at the pantry take different spots: ' + JSON.stringify(trips.pos));
 
+    // ---- order tickets on the pass ----
+    await page.evaluate(() => {
+      window.harness.select(null);
+      for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id });
+    });
+    await sleep(400);
+    const tCooks = await page.evaluate(() => {
+      const by = (n) => [...window.harness.agents.values()].find((a) => a.name === n);
+      const linus = by('Linus'), ada = by('Ada') || by('Grace');
+      window.harness.send({ type: 'send', id: linus.id, text: 'browse the stock list' });
+      window.harness.send({ type: 'send', id: linus.id, text: 'and then check the dessert menu' });
+      window.harness.send({ type: 'send', id: ada.id, text: 'ready the tasting plate' });
+      return { linus: linus.id, ada: ada.id, linusName: linus.name, adaName: ada.name };
+    });
+    await page.waitForFunction((ids) => {
+      const t = window.harness.tickets();
+      const states = new Set(t.map((x) => x.state));
+      return t.some((x) => x.id === ids.linus && x.state === 'progress') && t.some((x) => x.id === ids.linus && x.state === 'pending') && (states.has('done') || t.some((x) => x.id === ids.ada && x.state === 'progress'));
+    }, tCooks, { timeout: 20000 });
+    await page.waitForFunction((ids) => window.harness.tickets().some((x) => x.id === ids.ada && x.state === 'done') && window.harness.tickets().some((x) => x.state === 'progress') && window.harness.tickets().some((x) => x.state === 'pending'), tCooks, { timeout: 20000 });
+    const tk = await page.evaluate(() => {
+      const t = window.harness.tickets();
+      return { n: t.length, states: t.map((x) => x.state), names: t.map((x) => x.name), texts: t.map((x) => x.text), hits: window.harness.ticketHits().length };
+    });
+    assert(tk.n >= 3 && tk.n <= 8, 'the rail shows the open tickets (at most 8): ' + tk.n);
+    assert(tk.states.includes('pending') && tk.states.includes('progress') && tk.states.includes('done'), 'pending, in-progress and done tickets are all on the rail: ' + tk.states.join(','));
+    assert(tk.texts.every((s) => s.length <= 29), 'ticket prompts are truncated: ' + JSON.stringify(tk.texts));
+    assert(tk.hits >= 3, 'each visible ticket has a hit box');
+    const clicked = await page.evaluate((ids) => {
+      const h = window.harness.ticketHits().find((x) => x.id === ids.linus);
+      return h;
+    }, tCooks);
+    assert(clicked, 'Linus has a clickable ticket');
+    const tkSel = await page.evaluate((h) => {
+      window.harness.select(null);
+      const c = document.getElementById('office'), r = c.getBoundingClientRect(), O = window.Office;
+      const ev = new MouseEvent('click', { bubbles: true, clientX: r.x + ((h.x + h.w / 2) / O.W) * r.width, clientY: r.y + ((h.y + h.h / 2) / O.H) * r.height });
+      c.dispatchEvent(ev);
+      return window.harness.selected;
+    }, clicked);
+    assert(tkSel === tCooks.linus, 'clicking a ticket selects that cook and opens their chat (got ' + tkSel + ')');
+    await page.evaluate(() => window.harness.select(null));
+
     // ---- chat panel: Claude Code style formatting stays safe (model text is never parsed as HTML) ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);
     await page.waitForFunction(() => !document.getElementById('stopBtn').offsetParent, null, { timeout: 30000 }).catch(() => {});
