@@ -30,7 +30,7 @@ Every message you send runs the real CLI in print mode (`claude -p` or `agent -p
 | Send a prompt | The cook starts thinking. The chat shows `> your prompt`, like the terminal. |
 | Read, edit, write, run Bash | The cook chops or stirs, steam rises from the stove, and the tool name floats over their head. The chat gets `● Read(file)` lines with results, edit diffs and todo lists. |
 | Reply | Markdown in the chat and a speech bubble over the cook. A `Done in … · N turns · $…` line closes the run. |
-| Subagents and background agents (e.g. `/code-review`) | Idle colleagues take the jobs and work at their own stations. Papers and envelopes fly between the stations, and the lead waits until all of them report. |
+| Subagents and background agents (e.g. `/code-review`) | Idle colleagues become kitchen hands. The head chef hands each one a ticket, they walk to the station their tools need (pantry for reads, stove for Bash), carry the dish back to the pass, then go home. The lead waits until all of them report. |
 | Plan mode | The team walks to the pass. When the plan is ready they cheer and go back. |
 | Slash commands | Type `/` to pick from your own commands and skills (`~/.claude/commands`, skills, plugins, project folders). The text goes to the CLI unchanged. |
 | Permission modes | Shift+Tab in the message box cycles modes, like the CLI: default, accept edits and plan for Claude; default, plan and ask for Cursor. |
@@ -70,4 +70,4 @@ The server listens on 127.0.0.1 only and makes no outbound calls of its own; onl
 
 ## More
 
-[docs/DETAILS.md](docs/DETAILS.md) covers the renderer, the adapter internals and event shapes, the WebSocket protocol, tests and screenshot scripts.
+[docs/ROADMAP.md](docs/ROADMAP.md) lists what is built and what is next. [docs/DETAILS.md](docs/DETAILS.md) covers the renderer, the adapter internals and event shapes, the WebSocket protocol, tests and screenshot scripts.

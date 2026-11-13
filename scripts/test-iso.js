@@ -82,7 +82,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const p = await page.evaluate(() => {
       const O = window.Office, bad = [], samples = [];
       let n = 0, axis = true;
-      const spots = [...O.SPOTS.coffee, ...O.SPOTS.chat, ...O.SPOTS.pantry, ...O.SPOTS.bell, ...(O.SPOTS.heat || [])];
+      const spots = [...O.SPOTS.coffee, ...O.SPOTS.chat, ...O.SPOTS.pantry, ...O.SPOTS.bell, ...(O.SPOTS.heat || []), ...O.SPOTS.pass];
       for (const s of O.SLOTS) for (const spot of spots) {
         const pts = O.walkPath(s.i, spot); n++;
         const startTiles = new Set(s.start.map(([x, y]) => x + ',' + y));
@@ -121,7 +121,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
       }
       return { n, slots: O.SLOTS.length, bad: bad.slice(0, 5), axis, own, other, miss: (window.__miss || []).slice(0, 12) };
     });
-    assert(p.n === p.slots * 11 && p.bad.length === 0, `${p.n} paths (${p.slots} desks x coffee/chat/pantry/bell/heat spots) never touch blocked tiles ${p.bad.length ? JSON.stringify(p.bad) : ''}`);
+    assert(p.n === p.slots * 16 && p.bad.length === 0, `${p.n} paths (${p.slots} desks x coffee/chat/pantry/bell/heat/pass spots) never touch blocked tiles ${p.bad.length ? JSON.stringify(p.bad) : ''}`);
     if (p.miss.length) console.log('  misses:', JSON.stringify(p.miss));
     assert(p.axis, 'path segments follow the tile grid (axis aligned)');
     assert(p.own / (p.own + p.other) > 0.97, `walker torso is the front-most hit along paths (${p.own}/${p.own + p.other})`);
@@ -182,7 +182,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     });
     assert(rt.nbad === 0, `all ${rt.n} desk-to-desk dotted routes (${rt.slots} desks, every pair, every lane) stay on free floor ${JSON.stringify(rt.bad)}`);
 
-    // ---- live /code-review: helpers work at THEIR OWN desks, papers fly along dotted lines, wrap-up at each desk ----
+    // ---- live /code-review: helpers are kitchen hands: ticket from the lead, trips for their tools, dish back to the pass ----
     for (const n of ['Grace', 'Alan']) { await page.evaluate((n) => window.harness.send({ type: 'hire', name: n, cwd: '/tmp' }), n); await sleep(250); }
     await sleep(500);
     const adaId = await page.evaluate(() => [...window.harness.agents.values()].find((a) => a.name === 'Ada').id);
@@ -195,15 +195,13 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const live = await page.evaluate((id) => {
       const H = window.harness, ppl = [...H.agents.values()], helpers = ppl.filter((a) => H.help(a.id));
       const tiles = new Set(helpers.map((a) => a.slot));
-      const seated = helpers.every((a) => { const h = H.help(a.id); return h.seated && !h.away; });
       const ada = ppl.find((a) => a.id === id);
-      return { n: helpers.length, tiles: tiles.size, seated, roles: helpers.map((a) => H.help(a.id).role).sort(), people: ppl.length, n0: window.__n0, first: window.__first, notAda: !H.help(id),
+      return { n: helpers.length, tiles: tiles.size, roles: helpers.map((a) => H.help(a.id).role).sort(), people: ppl.length, n0: window.__n0, first: window.__first, notAda: !H.help(id),
         sub: document.querySelectorAll('#transcript details.msg.sub').length, open: document.querySelectorAll('#transcript details.msg.sub[open]').length,
         team: document.querySelectorAll('#teamLog .te').length, teamVisible: !document.getElementById('teamBox').hidden,
         tip: H.tooltip(helpers[0].id), names: helpers.map((a) => a.name), hired: ppl.filter((a) => a.transcript.some((m) => /Hired automatically/.test(m.text))).map((a) => a.name) };
     }, adaId);
     assert(live.n === 4 && live.tiles === 4 && live.notAda, `/code-review: 4 people (not the lead), each from a different desk (${live.names.join(',')})`);
-    assert(live.seated, 'all 4 helpers stay at their own stations while working (nobody crowding the lead)');
     assert(JSON.stringify(live.roles) === JSON.stringify(['performance', 'security', 'style', 'tests']), `helpers carry the 4 derived roles (${live.roles.join(',')})`);
     assert(live.people === live.n0 + 1 && live.hired.length === 1, `office had 3 idle colleagues, so exactly 1 new regular agent was auto-hired (${live.hired.join(',')})`);
     const fp = live.first[live.hired[0]];
@@ -221,14 +219,22 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const subTxt = await page.evaluate(() => document.querySelector('#transcript details.msg.sub summary').textContent);
     assert(/^●Agent\([^)]+\)⎿\w+ · \w+ · (running|done)/.test(subTxt), 'helper reads "● Agent(label)" then "⎿ colleague · role · status": ' + subTxt);
     // flights + inferred interactions during the run
-    let kinds = new Set(), sawPeerTalk = false, sawHuddle = false, standing = 0;
-    for (let i = 0; i < 700 && !(sawHuddle && kinds.has('back') && kinds.has('out') && sawPeerTalk); i++) {
-      const r = await page.evaluate((id) => ({ st: window.harness.states().filter((s) => s.helping === 'work' && !s.seated).length, f: window.harness.flights().map((f) => f.kind), pe: [...window.harness.agents.values()].some((a) => (window.harness.help(a.id) || {}).peer), hu: window.harness.huddle(id) }), adaId);
-      standing += r.st; r.f.forEach((k) => kinds.add(k)); sawPeerTalk = sawPeerTalk || r.pe; sawHuddle = sawHuddle || r.hu; await sleep(60);
+    let kinds = new Set(), sawPeerTalk = false, sawHuddle = false, handTrips = new Set(), served = [], stacked = false;
+    for (let i = 0; i < 900 && !(sawHuddle && kinds.has('out') && sawPeerTalk && served.length >= 4); i++) {
+      const r = await page.evaluate((id) => ({ st: window.harness.states().filter((s) => s.helping), f: window.harness.flights().map((f) => f.kind), pe: [...window.harness.agents.values()].some((a) => (window.harness.help(a.id) || {}).peer), hu: window.harness.huddle(id) }), adaId);
+      const atPass = r.st.filter((s) => s.mode === 'serve').map((s) => s.x.toFixed(1) + ',' + s.y.toFixed(1));
+      if (new Set(atPass).size !== atPass.length) stacked = true;
+      for (const s of r.st) {
+        if (s.helping === 'work' && s.away && (s.dest === 'pantry' || s.dest === 'heat')) handTrips.add(s.dest);
+        if (s.mode === 'serve' && s.carry && !served.some((x) => x.id === s.id)) served.push({ id: s.id, x: s.x, y: s.y });
+      }
+      r.f.forEach((k) => kinds.add(k)); sawPeerTalk = sawPeerTalk || r.pe; sawHuddle = sawHuddle || r.hu; await sleep(60);
     }
-    assert(standing === 0, 'during the whole run no working helper was ever standing/walking away from their desk');
-    assert(kinds.has('out') && kinds.has('back'), 'paper flies lead -> helper and an envelope flies helper -> lead');
-    assert(sawPeerTalk, 'two helpers touching the same file talk across their desks via bubbles + a peer line (inferred peer talk), without walking');
+    assert(kinds.has('out'), 'the lead hands every helper a ticket (flies lead -> helper)');
+    assert(handTrips.has('pantry'), 'kitchen hands walk to the pantry for their Read/Grep jobs: ' + [...handTrips].join(','));
+    assert(served.length === 4 && served.every((p) => p.x > 6 && p.x < 10 && p.y < 3), 'every helper carries a dish to the pass when done: ' + JSON.stringify(served.map((p) => [p.x.toFixed(1), p.y.toFixed(1)])));
+    assert(!stacked, 'kitchen hands at the pass at the same time stand on different spots');
+    assert(sawPeerTalk, 'two helpers touching the same file compare notes via bubbles (inferred peer talk)');
     assert(sawHuddle, 'synchronized wrap-up (celebration at every desk + team wrap-up chip) shows when every helper has reported');
     const inf = await page.evaluate((id) => ({ team: window.harness.team(id), tags: [...document.querySelectorAll('#teamLog .te .inf')].map((e) => e.textContent) }), adaId);
     assert(inf.team.filter((e) => e.kind === 'peer').every((e) => e.inferred) && inf.team.some((e) => e.kind === 'peer') && inf.tags.length >= 1, 'peer entries are flagged inferred and tagged "inferred" in the feed');

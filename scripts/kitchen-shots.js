@@ -1,11 +1,12 @@
 'use strict';
 // HD kitchen screenshots: 1920x1080 viewport, deviceScaleFactor 2 -> 3840x2160 PNGs.
 //   kitchen-01-idle.png      cooks idle (stretch / read / look / coffee)
-//   kitchen-02-working.png   several cooks busy, including a /code-review with helpers
+//   kitchen-02-working.png   all six line cooks busy at their own sets
 //   kitchen-03-headchef.png  close-up of the pass (head chef)
 //   kitchen-04-trips.png     cooks at pantry, own station and stove/heat at once
 //   kitchen-05-tickets.png   pass rail with pending, in-progress and done tickets
 //   kitchen-06-line.png      close view of the two joined counter runs and their six sets
+//   kitchen-07-hands.png     the head chef's /code-review: kitchen hands at the pantry, a dish coming back to the pass
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -84,17 +85,9 @@ const FAKE = makeFakeClaudeDir();
 
     await page.waitForFunction(() => window.harness.states().every((a) => !a.away && !a.act), null, { timeout: 40000 });
 
-    // 02: all six station sets active, including a /code-review with helpers at their own sets
-    await sendTo('Grace', '/code-review');
-    await page.waitForFunction(() => {
-      const H = window.harness;
-      const helpers = [...H.agents.values()].filter((a) => { const h = H.help(a.id); return h && h.phase === 'work' && h.seated; });
-      return helpers.length >= 4;
-    }, null, { timeout: 40000 });
+    // 02: all six station sets active
     await page.evaluate(() => {
-      const H = window.harness;
-      const rest = [...H.agents.values()].filter((a) => a.slot < 6 && a.name !== 'Grace' && !H.help(a.id));
-      for (const a of rest) H.send({ type: 'send', id: a.id, text: 'chop the garnish' });
+      for (const a of window.harness.agents.values()) if (a.slot < 6) window.harness.send({ type: 'send', id: a.id, text: 'chop the garnish' });
     });
     await page.waitForFunction(() => {
       const line = window.harness.states().filter((a) => a.slot < 6);
@@ -173,6 +166,22 @@ const FAKE = makeFakeClaudeDir();
     await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
     await sleep(400);
     await shot('kitchen-05-tickets.png');
+
+    // 07: kitchen hands: the head chef hands out tickets, helpers work where their tool is, finished dishes come back to the pass
+    await page.evaluate(() => {
+      window.harness.select(null);
+      for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id });
+    });
+    await idle(30000).catch(() => {});
+    await sleep(6000);
+    await sendTo('Ada', '/code-review');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => {
+      const st = window.harness.states();
+      return st.some((s) => s.carry && s.mode === 'serve') && st.some((s) => s.helping === 'work' && s.away);
+    }, null, { timeout: 60000 });
+    await sleep(300);
+    await shot('kitchen-07-hands.png');
   } finally {
     await browser.close(); srv.kill();
   }

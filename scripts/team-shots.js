@@ -1,7 +1,7 @@
 'use strict';
 // Shared by screenshots.js / screenshots-hd.js: the mock /code-review scenario. The lead hands out the plan, EXISTING colleagues (plus an
-// auto-hired one when nobody is idle) work at THEIR OWN desks; one screenshot per beat: helpers working with dotted lines + papers in flight,
-// a peer-conversation moment (inferred), a result handoff in mid-air and the synchronized wrap-up.  shots = { mid, peer, handoff, huddle }.
+// auto-hired one when nobody is idle) take a ticket at their own stations; one screenshot per beat: helpers working with dotted lines + tickets in flight,
+// a peer-conversation moment (inferred), a helper carrying the dish to the pass and the synchronized wrap-up.  shots = { mid, peer, handoff, huddle }.
 module.exports = async function teamShots(page, parentName, shots, sleep) {
   const pid = await page.evaluate((n) => { const a = [...window.harness.agents.values()].find((x) => x.name === n); window.harness.select(a.id); return a.id; }, parentName);
   await page.fill('#input', '/code-review'); await page.press('#input', 'Enter');
@@ -11,7 +11,7 @@ module.exports = async function teamShots(page, parentName, shots, sleep) {
     const s = await page.evaluate((id) => {
       const H = window.harness, ppl = [...H.agents.values()];
       const work = ppl.filter((a) => { const h = H.help(a.id); return h && h.phase === 'work' && h.seated; });
-      return { work: work.length, flying: H.flights().filter((f) => f.kind === 'out').length, peer: ppl.some((a) => (H.help(a.id) || {}).peer), back: H.flights().some((f) => f.kind === 'back'), huddle: H.huddle(id) };
+      return { work: work.length, flying: H.flights().filter((f) => f.kind === 'out').length, peer: ppl.some((a) => (H.help(a.id) || {}).peer), back: H.states().some((a) => a.carry), huddle: H.huddle(id) };
     }, pid);
     if (!done.mid && s.work >= 4 && (s.flying || Date.now() - t0 > 30000)) { done.mid = true; await sleep(450); await shots.mid(); continue; }
     if (done.mid && !done.peer && s.peer) { done.peer = true; await sleep(450); await shots.peer(); continue; }

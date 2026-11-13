@@ -76,8 +76,10 @@ Turn plan mode on per agent: the **Permission mode** select in the Hire dialog, 
 ## Team collaboration: colleagues help each other
 
 One project, several agents: when an agent runs work in parallel (a Claude `Task`/`Agent` fan-out such as `/code-review`, Cursor helper tasks,
-or the mock's simulated team) the helpers are **the people who already work in the kitchen**. Nobody pops in or fades out, and **nobody walks over to the
-lead**: every helper does the job **at their own station**, and the exchange is drawn between the stations.
+or the mock's simulated team) the helpers are **the people who already work in the kitchen**. Nobody pops in or fades out. They work as **kitchen hands**:
+the head chef's ticket flies to the helper's station, the first tool with a station (the kitchen-trip mapping: reads → pantry, Bash → stove, deploy → bell,
+edits → own board) sends them there for the whole job, and when it ends they carry the dish (burnt if it failed) to a free spot at the pass, hand it over and
+walk home. The text below still describes the station-to-station lines and the wrap-up.
 
 ![4 helpers](../screenshots/15-team-code-review-4-helpers.png)
 ![peer talk](../screenshots/16-team-peer-conversation.png)

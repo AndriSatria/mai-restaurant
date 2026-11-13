@@ -58,6 +58,8 @@
     // a couple of places at the fridge / shelf and at the pass, so cooks on the same trip don't stack
     pantry: [{ x: 11.5, y: 1.5, face: 3 }, { x: 10.5, y: 2.5, face: 3 }, { x: 11.5, y: 3.5, face: 3 }],
     bell: [{ x: 6.5, y: 1.5, face: 3 }, { x: 6.5, y: 2.5, face: 3 }],
+    // in front of the pass, where kitchen hands bring dishes back to the head chef
+    pass: [{ x: 7.5, y: 1.5, face: 3 }, { x: 6.5, y: 1.5, face: 3 }, { x: 7.5, y: 2.5, face: 3 }, { x: 6.5, y: 2.5, face: 3 }, { x: 9.5, y: 1.5, face: 2 }],
     // aisle spots beside the heat sets, used when Bash is at a cold station (sink / prep)
     heat: [{ x: 3.5, y: 3.5, face: 0 }, { x: 3.5, y: 6.5, face: 0 }, { x: 6.5, y: 3.5, face: 2 }],
   };
@@ -756,7 +758,8 @@
     head(c, look, -30 - bob + nod, front, { blink, mood, hat: (ag.slot === MGR || ag.main) ? 'toque' : 'cap' });
     const sw = walking ? (fr === 1 ? 1 : fr === 3 ? -1 : 0) : 0;
     let N = [-5, -9 + sw * 2], Fh = [5, -9 - sw * 2];
-    if (ag.mode === 'drink') { const sip = Math.floor(t * 1.5) % 2; Fh = [4, -17 - (sip ? 3 : 0)]; N = [-5, -9]; ret.mug = [Fh[0], Fh[1] - 6]; }
+    if (ag.carry) { N = [3, -14]; Fh = [8, -14]; }
+    else if (ag.mode === 'drink') { const sip = Math.floor(t * 1.5) % 2; Fh = [4, -17 - (sip ? 3 : 0)]; N = [-5, -9]; ret.mug = [Fh[0], Fh[1] - 6]; }
     else if (ag.mode === 'pantry' && !walking) { const reach = Math.abs(Math.sin(t * 2.2 + ag.phase * 4)); N = [-3, -22 - reach * 5]; Fh = [6, -16 - (1 - reach) * 3]; }
     else if (ag.mode === 'bell' && !walking) { const ding = Math.floor(t * 3 + ag.phase) % 4 === 0; N = [-5, -9]; Fh = ding ? [8, -22] : [6, -14]; }
     else if (ag.mode === 'heat' && !walking) { const a = t * 9 + ag.phase * 4; N = [3, -12]; Fh = [7 + Math.cos(a) * 2, -12 + Math.sin(a) * 2]; }
@@ -794,7 +797,8 @@
     } else if (pose === 'wait' && ag.talk != null) { const g = Math.floor(t * 4) % 2; Fh = [ag.talkDir > 0 ? 8 : 6, -19 - g * 3]; }
     limb(c, 4, -18 - bob, Fh[0], Fh[1], look, 1, true);
     limb(c, -4, -18 - bob, N[0], N[1], look, -1, false);
-    if (ag.mode === 'drink') { const hx = Fh[0], hy = Fh[1]; R(c, hx - 2, hy - 5, 5, 5, '#f5f5f0'); R(c, hx + 3, hy - 4, 1, 3, '#f5f5f0'); R(c, hx - 2, hy - 5, 5, 1, '#5b3a1e'); }
+    if (ag.carry) { disc(c, 6, -16, 4, '#f0eee8'); disc(c, 6, -16, 3, '#fff'); disc(c, 6, -17, 2, ag.carry === 'burnt' ? '#3a2a20' : '#c84830'); }
+    else if (ag.mode === 'drink') { const hx = Fh[0], hy = Fh[1]; R(c, hx - 2, hy - 5, 5, 5, '#f5f5f0'); R(c, hx + 3, hy - 4, 1, 3, '#f5f5f0'); R(c, hx - 2, hy - 5, 5, 1, '#5b3a1e'); }
     else if (!walking && !ag.away && ag.act === 'read') {
       const cov = ['#8e4ec6', '#3e8ef7', '#e5484d', '#30a46c'][ag.slot % 4], by2 = -16;
       R(c, -7, by2, 14, 9, cov); R(c, -6, by2 + 1, 6, 6, '#fffbe8'); R(c, 0, by2 + 1, 6, 6, '#fffbe8'); R(c, -1, by2 + 1, 2, 6, '#d9cfa8');
@@ -891,11 +895,11 @@
     }
   }
 
-  // pixel icons for the handoffs
-  function paperIcon(c, x, y, f) {
+  // pixel icons for the handoffs: the order ticket the lead hands out (same colour as an in-progress ticket on the rail)
+  function ticketIcon(c, x, y, f) {
     x = Math.round(x); y = Math.round(y); const w = f % 2 ? 2 : 3;
-    R(c, x - w - 1, y - 4, w * 2 + 2, 8, '#161827'); R(c, x - w, y - 3, w * 2, 6, '#fffbe8');
-    R(c, x - w + 1, y - 2, Math.max(1, w * 2 - 2), 1, '#9a8f6a'); R(c, x - w + 1, y, Math.max(1, w * 2 - 2), 1, '#9a8f6a');
+    R(c, x - w - 1, y - 5, w * 2 + 2, 10, '#161827'); R(c, x - w, y - 4, w * 2, 8, '#ffc4b0'); R(c, x - w, y - 4, w * 2, 2, '#e5484d');
+    R(c, x - w + 1, y - 1, Math.max(1, w * 2 - 2), 1, '#8a4a3a'); R(c, x - w + 1, y + 1, Math.max(1, w * 2 - 2), 1, '#8a4a3a');
   }
   function envelopeIcon(c, x, y, seal) {
     x = Math.round(x); y = Math.round(y);
@@ -1149,7 +1153,7 @@
       } else {
         const pe = byId[f.pid], he = byId[f.hid]; if (!pe || !he) continue;
         kc = roleCol(he.help ? he.help.role : f.role); off = lane[he.id] || 0;
-        if (f.kind === 'out') { sa = pe.slot; sb = he.slot; draw = (x, y) => paperIcon(lc, x, y, Math.floor(t * 10)); }
+        if (f.kind === 'out') { sa = pe.slot; sb = he.slot; draw = (x, y) => ticketIcon(lc, x, y, Math.floor(t * 10)); }
         else { sa = he.slot; sb = pe.slot; draw = (x, y) => envelopeIcon(lc, x, y, f.ok === false ? '#e5484d' : '#30a46c'); }
       }
       // the paper / envelope glides along the dotted line, hovering a little above the floor, with a short trail

@@ -472,9 +472,8 @@
       if (a.help) {
         const h = a.help, desk = !a.away && h.phase !== 'go';
         const pose = h.phase === 'go' ? 'walk' : h.phase === 'work' ? 'work' : (h.phase === 'failed' ? 'worry' : 'cheer');
-        if (desk) {       // seated at their own desk: typing animation, monitor flicker and tool chip come from the normal "working" rendering
-          if (h.phase === 'work') { state = 'working'; tool = h.tool || 'starting…'; } else { state = h.phase === 'failed' ? 'error' : (h.cheerUntil && now < h.cheerUntil ? 'done' : 'idle'); tool = null; }   // ok: sits satisfied, then everyone celebrates together at wrap-up
-        }
+        if (h.phase === 'work') { state = 'working'; tool = h.tool || 'starting…'; }   // at their own station or on a trip for the tool
+        else if (desk) { state = h.phase === 'failed' ? 'error' : (h.cheerUntil && now < h.cheerUntil ? 'done' : 'idle'); tool = null; }   // ok: back at the station, then everyone celebrates together at wrap-up
         const pe = h.peer && now < h.peer.until ? agents.get(h.peer.withId) : null;
         if (pe) {
           const beat = Math.floor((now - h.peer.t0) / (1100 * TS));
@@ -489,7 +488,7 @@
         phase: a.phase, away: a.away, x: a.x, y: a.y, face: a.face || 0, mode: a.mode, dest: a.dest || null, cook: a.cook || null, bubble,
         act: a.act ? a.act.kind : null, actP: a.act ? (now - a.act.t0) / 1000 : 0,
         talk: htalk != null ? htalk : talk, talkDir: htalk != null ? htalkDir : (a.chatSide === 0 ? 1 : -1),
-        help: helpV, waiting: (a.subs || []).length,
+        help: helpV, waiting: (a.subs || []).length, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1) && a.help ? (a.help.phase === 'failed' ? 'burnt' : 'ok') : null,
         planAge: a.planAt && now - a.planAt < 3200 * TS ? (now - a.planAt) / 1000 : null,
         huddle: a.huddle && now < a.huddle.until ? (now - a.huddle.t0) / 1000 : null,
         faceOv: a.turn && now < a.turn.until && !a.away ? a.turn.face : null,
@@ -499,11 +498,10 @@
   const planView = () => { const o = planOwner(); return o ? { state: o.plan.state, summary: o.plan.summary || '', ownerId: o.id } : null; };
   const flightsView = (now) => flights.map((f) => ({ kind: f.kind, pid: f.pid, hid: f.hid, toId: f.toId, ok: f.ok, p: (now - f.t0) / f.dur }));
 
-  // ---------- helpers (subagents) = EXISTING colleagues, working at THEIR OWN desks ----------
+  // ---------- helpers (subagents) = EXISTING colleagues working as kitchen hands ----------
   // The server assigns every sub-task to an existing person (idle first, otherwise a new regular agent is hired and walks in through the door).
-  // That person gets `helping`: if they are away (coffee, chat) they walk back to their own desk, sit and show the helper state there (role badge,
-  // lanyard, tool chip, typing, monitor flicker, "helping <lead>" tag). Nobody walks over to the lead: papers/envelopes/letters fly along dotted
-  // lines between the desks, and the wrap-up is a synchronized celebration at each desk plus the consolidated bubble over the lead.
+  // That person gets `helping`: if away they walk back to their own station first. The head chef's ticket flies over, then the first tool with
+  // a station (see toolTrip) sends them there for the whole task. When the job ends they carry the dish to the pass, then go home.
   const flights = [];                // in-flight papers/envelopes/letters (drawn along the desk-to-desk lines)
   const peerQ = [];                  // inferred peer events waiting for both helpers to be working
   function turnToward(a, x, y, ms, now) {
@@ -539,9 +537,7 @@
   function endHelp(a, ok, short, now) {
     const h = a.help; if (!h || h.phase === 'ok' || h.phase === 'failed') return;
     if (h.phase === 'go') { h.ended = { ok, short }; return; }     // result arrived while still walking to the desk: hand it over once seated
-    h.phase = ok ? 'ok' : 'failed'; h.endAt = now; h.tool = null; h.say = short || (ok ? 'done' : 'failed'); h.sayUntil = now + 3400 * TS;
-    const parent = agents.get(h.parentId);
-    if (parent) { flights.push({ kind: 'back', pid: parent.id, hid: a.id, ok, t0: now, dur: 1500 * TS }); turnToward(parent, seatOf(a).x, seatOf(a).y, 1800 * TS, now); }
+    h.phase = ok ? 'ok' : 'failed'; h.endAt = now; h.tool = null; h.say = short || (ok ? 'done' : 'failed'); h.sayUntil = now + 3400 * TS;   // updateHelp walks the dish to the pass
   }
   /** the helper job is over for the client: back to normal idle, still sitting at their own desk */
   function releaseHelp(a, now) {
@@ -573,19 +569,25 @@
       if (h.phase === 'go' && !a.away) { a.mode = 'sit'; arriveHelp(a, now); }
       if (h.peer) {
         const o = agents.get(h.peer.withId);
-        if (now < h.peer.until && o && !a.away) turnToward(a, seatOf(o).x, seatOf(o).y, 300, now); else h.peer = null;
+        if (now < h.peer.until && o) { if (!a.away) turnToward(a, seatOf(o).x, seatOf(o).y, 300, now); } else h.peer = null;
       }
-      if (h.phase === 'ok' || h.phase === 'failed') {          // wait (at the desk) until the team wrapped up, then back to normal idle
+      if (h.phase === 'ok' || h.phase === 'failed') {          // carry the dish to the pass, come back, wait until the team wrapped up, then normal idle
         const parent = agents.get(h.parentId);
+        if (!h.serving && (!a.away || a.dest === 'pantry' || a.dest === 'heat' || a.dest === 'bell')) {
+          const spot = claimSpot('pass', a); h.serving = true;
+          if (!spot) h.served = true;
+          else if (!a.away) startWalk(a, spot, 'serve');
+          else { a.pts = Office.walkBetween({ x: a.x, y: a.y }, spot); a.idx = 0; a.target = Math.min(1, a.pts.length - 1); a.dir = 1; a.mode = 'walk'; a.dest = 'serve'; a.spot = spot; }   // straight from the pantry / stove
+        }
         const others = [...agents.values()].some((b) => b !== a && b.help && b.help.parentId === h.parentId && (b.help.phase === 'go' || b.help.phase === 'work'));
         const wrapping = parent && parent.huddle && now < parent.huddle.until;
-        if (!parent || now > h.endAt + 8000 * TS || (now > h.endAt + 2600 * TS && !others && !wrapping)) releaseHelp(a, now);
+        if (!a.away && (!parent || now > h.endAt + 25000 * TS || (h.served && !others && !wrapping))) releaseHelp(a, now);
       }
     }
     for (let i = peerQ.length - 1; i >= 0; i--) {
       const q = peerQ[i], e = q.e, A = agents.get(e.from && e.from.helperId), B = agents.get(e.to && e.to.helperId);
       if (!A || !B || now - q.t > 10000 * TS) { peerQ.splice(i, 1); continue; }
-      if (A.help && B.help && !A.away && !B.away && A.help.phase === 'work' && B.help.phase === 'work') {
+      if (A.help && B.help && A.help.phase === 'work' && B.help.phase === 'work') {
         const g = Math.max(0, ['?', '!', '...'].indexOf(e.glyph)), until = now + 3600 * TS;
         A.help.peer = { withId: B.id, t0: now, until, side: 0, g, why: e.text }; B.help.peer = { withId: A.id, t0: now, until, side: 1, g, why: e.text };
         peerQ.splice(i, 1);
@@ -654,7 +656,8 @@
   const busy = (a) => a.state !== 'idle' && a.state !== 'done';
   const joinable = (a, o) => !a.away && a.mode === 'sit' && !a.act && !a.help && !a.pendingHelp && !a.helping && !a.queued && !busy(a) && a.id !== selectedId && a !== o;
   const wantsHome = (a) => {
-    if (a.away && (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat')) return tripOf(a) !== (a.dest === 'heat' ? 'stove' : a.dest) || a.id === selectedId;
+    if (a.away && a.dest === 'serve') return !a.help;
+    if (a.away && (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat')) return tripOf(a) !== (a.dest === 'heat' ? 'stove' : a.dest);
     if (a.away && a.dest === 'meet') { const o = planOwner(); return !meetingFor(a) || (a !== o && (busy(a) || !!a.help || !!a.helping || a.id === selectedId)); }
     return !!a.help || busy(a) || a.id === selectedId || !!planOwner();
   };
@@ -664,7 +667,7 @@
 
   // tool use becomes a kitchen trip: pantry (read/search), own station's set (edit), stove/heat (bash: stay if
   // the station is already a heat set, otherwise walk to the nearest heat aisle), pass bell for a deploy / git push.
-  // Helpers on a team job stay at their own station.
+  // Kitchen hands (helpers) make the same trips for their subagent's tool once the ticket has reached them.
   const DEPLOY_RE = /\b(git\s+push|deploy|kubectl\s+apply|terraform\s+apply|npm\s+publish|docker\s+push|wrangler\s+deploy|gh\s+release)\b/i;
   const TRIPS = [
     ['pantry', /^(Read|Grep|Glob|LS|Search|WebSearch|WebFetch|GlobTool)$/i],
@@ -680,8 +683,13 @@
     return null;
   }
   function tripOf(a) {
+    if (a.help) {
+      const h = a.help;
+      if (h.phase !== 'work' || performance.now() < h.arrivedAt + 1800 * TS) return null;   // the ticket is still on its way
+      if (!h.trip) h.trip = toolTrip(h.tool);      // the first tool with a station picks it for the whole task
+      return h.trip;
+    }
     if (a.id === selectedId) return null;
-    if (a.help && (a.help.phase === 'go' || a.help.phase === 'work')) return null;
     if (a.dest === 'meet' || a.mode === 'meet' || a.meetSeat >= 0) return null;
     if (a.state !== 'working' || !a.tool) return null;
     return toolTrip(a.tool, a.toolSummary);
@@ -690,7 +698,7 @@
     const spots = (Office.SPOTS && Office.SPOTS[kind]) || [];
     if (!spots.length) return null;
     const taken = new Set();
-    for (const b of agents.values()) if (b !== a && b.away && b.dest === kind && b.spot) taken.add(b.spot.x + ',' + b.spot.y);
+    for (const b of agents.values()) if (b !== a && b.away && b.spot) taken.add(b.spot.x + ',' + b.spot.y);
     for (const s of spots) if (!taken.has(s.x + ',' + s.y)) return s;
     const n = [...agents.values()].filter((b) => b !== a && b.away && b.dest === kind).length;
     const base = spots[n % spots.length], ox = n % 2 ? 0.32 : -0.32, oy = 0.28 * (Math.floor(n / spots.length) + 1);
@@ -771,6 +779,7 @@
   function stepWalker(a, dt, now) {
     if (a.mode === 'meet') { if (wantsHome(a)) { if (!a.leaveAt) a.leaveAt = now + rand(0, 900) * TS; if (now >= a.leaveAt) { a.leaveAt = 0; leave(a); } } return; }
     if (a.mode === 'pantry' || a.mode === 'bell' || a.mode === 'heat') { if (wantsHome(a)) leave(a); return; }
+    if (a.mode === 'serve') { if (now > a.serveUntil || !a.help) { a.pts = Office.walkPath(a.slot, a.spot); a.idx = a.pts.length - 1; leave(a); } return; }
     if (a.mode === 'drink') { if (now > a.drinkUntil || wantsHome(a)) leave(a); return; }
     if (a.mode === 'chat') {
       const p = agents.get(a.partner);
@@ -790,9 +799,13 @@
           if (a.dest === 'meet') { a.mode = 'meet'; a.meetSince = now; }
           else if (a.dest === 'drink') { a.mode = 'drink'; a.drinkUntil = now + (WANDER_FAST ? 4000 : rand(5000, 10000)) * TS; }
           else if (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat') { a.mode = a.dest; }
+          else if (a.dest === 'serve') {      // dish handed over at the pass: the lead gets the ✓ / ! bubble
+            a.mode = 'serve'; a.serveUntil = now + 1800 * TS;
+            const p = a.help && agents.get(a.help.parentId); if (p) p.rcv = { t0: now, ok: a.help.phase !== 'failed' };
+          }
           else { a.mode = 'chat'; a.waitSince = now; }
         } else a.target++;
-      } else if (a.target === 0) { a.away = false; a.mode = 'sit'; a.partner = null; a.meetSeat = -1; a.dest = null; if (a.help && a.help.phase === 'go') arriveHelp(a, now); else endAct(a, now); }
+      } else if (a.target === 0) { if (a.dest === 'serve' && a.help) a.help.served = true; a.away = false; a.mode = 'sit'; a.partner = null; a.meetSeat = -1; a.dest = null; if (a.help && a.help.phase === 'go') arriveHelp(a, now); else endAct(a, now); }
       else a.target--;
     } else { a.x += (dx / d) * stepLen; a.y += (dy / d) * stepLen; a.face = faceOf(dx, dy); }
   }
@@ -876,7 +889,7 @@
     toolTrip,
     tickets: () => collectTickets(performance.now()),
     ticketHits: () => (Office.ticketHits && Office.ticketHits()) || [],
-    states: () => [...agents.values()].map((a) => ({ id: a.id, main: !!a.main, slot: a.slot, meet: a.away && a.mode === 'meet', dest: a.dest, name: a.name, type: a.type, state: a.state, tool: a.tool, x: a.x, y: a.y, away: a.away, mode: a.mode, act: a.act && a.act.kind, cook: a.cook || null, subs: (a.subs || []).length, helping: a.help ? a.help.phase : null, home: !a.away, seated: !a.away && a.mode === 'sit' })),
+    states: () => [...agents.values()].map((a) => ({ id: a.id, main: !!a.main, slot: a.slot, meet: a.away && a.mode === 'meet', dest: a.dest, name: a.name, type: a.type, state: a.state, tool: a.tool, x: a.x, y: a.y, away: a.away, mode: a.mode, act: a.act && a.act.kind, cook: a.cook || null, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1), subs: (a.subs || []).length, helping: a.help ? a.help.phase : null, home: !a.away, seated: !a.away && a.mode === 'sit' })),
     help: (id) => { const a = agents.get(id); return a && a.help ? { phase: a.help.phase, parentId: a.help.parentId, role: a.help.role, label: a.help.label, tool: a.help.tool, say: a.help.say, x: a.x, y: a.y, mode: a.mode, away: a.away, seated: !a.away && a.mode === 'sit', peer: !!a.help.peer, tile: Math.floor(a.x) + ',' + Math.floor(a.y) } : null; },
     team: (id) => { const a = agents.get(id); return a ? a.team.slice() : []; },
     huddle: (id) => { const a = agents.get(id); return !!(a && a.huddle && performance.now() < a.huddle.until); },
