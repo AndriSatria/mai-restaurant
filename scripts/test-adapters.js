@@ -244,7 +244,7 @@ const waitFor = async (fn, ms = 15000) => { const t = Date.now(); while (Date.no
     assert(seq[0] === null && seq.includes('planning') && seq.indexOf('planning') < seq.indexOf('ready'), 'claude plan mode: planning -> ready: ' + seq.join('>'));
     const ready = log.slice(mk).map((m) => m.agent).filter((a) => a && a.id === pla.id && a.plan && a.plan.state === 'ready')[0];
     assert(/Plan: add dark mode/.test(ready.plan.summary) && /Read the entry points/.test(ready.plan.summary), 'ExitPlanMode plan text becomes the summary: ' + ready.plan.summary);
-    assert(log.slice(mk).some((m) => m.type === 'msg' && m.id === pla.id && m.msg.role === 'system' && /gathering at the round table/.test(m.msg.text)), 'transcript notes the gathering');
+    assert(log.slice(mk).some((m) => m.type === 'msg' && m.id === pla.id && m.msg.role === 'system' && /gathering at the pass/.test(m.msg.text)), 'transcript notes the gathering');
     await waitFor(() => latest(pla.id).state === 'done', 10000);
     assert(latest(pla.id).plan && latest(pla.id).plan.state === 'ready', 'the plan check stays up right after the run ends (hold)');
     await waitFor(() => latest(pla.id).plan === null, 15000);
@@ -452,7 +452,7 @@ const waitFor = async (fn, ms = 15000) => { const t = Date.now(); while (Date.no
     for (let i = 1; i < MAX_AGENTS; i++) ws.send(JSON.stringify({ type: 'hire', name: 'F' + i, cwd: '/tmp', agentType: 'mock' }));
     await waitFor(() => log.slice(mk0).filter((m) => m.type === 'agent' && m.isNew).length === MAX_AGENTS - 1);
     ws.send(JSON.stringify({ type: 'resume', sessionId: fake.ids.blog }));
-    const full = await waitFor(() => log.find((m) => m.type === 'error' && /office is full/.test(m.message)), 5000);
+    const full = await waitFor(() => log.find((m) => m.type === 'error' && /kitchen is full/.test(m.message)), 5000);
     assert(/Fire someone/.test(full.message), 'full office: resume gives a clear message: ' + full.message);
     assert(filesBefore() === before, 'the Claude folder is untouched (read-only)');
     ws.close(); srv.kill('SIGTERM');

@@ -24,7 +24,7 @@ body { display: flex; flex-direction: column; }
 .btn.red { background: #5a2226; border-color: var(--red); }
 .btn.small { padding: 3px 10px; }
 main { flex: 1; display: flex; min-height: 0; }
-#stage { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; background: #0c0d14; overflow: hidden; }
+#stage { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; background: #1a1410; overflow: hidden; }
 #office { image-rendering: pixelated; display: block; cursor: default; }
 #chat { width: 380px; flex: none; background: var(--panel); border-left: 2px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
 #chatEmpty { margin: auto; text-align: center; padding: 20px; color: var(--dim); }
@@ -32,7 +32,7 @@ main { flex: 1; display: flex; min-height: 0; }
 #chatBody { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 #chatBody[hidden], #chatEmpty[hidden] { display: none; }
 #chatHead { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--panel2); border-bottom: 2px solid var(--line); }
-#avatar { width: 40px; height: 52px; image-rendering: pixelated; background: #2e3350; border: 2px solid var(--line); }
+#avatar { width: 40px; height: 52px; image-rendering: pixelated; background: #2a2620; border: 2px solid var(--line); }
 #chatHead .meta { flex: 1; min-width: 0; }
 #chatName { font-weight: 800; font-size: 15px; }
 #chatCwd { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

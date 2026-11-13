@@ -1,4 +1,4 @@
-/* mAI office frontend: websocket client, chat panel, animation state. */
+/* mAI-restaurant frontend: websocket client, chat panel, animation state. */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -158,7 +158,7 @@
       for (const m of a.transcript) appendMsg(m, true);
       tr.scrollTop = tr.scrollHeight;
       $('input').placeholder = `Message ${a.name}… (Enter to send, Shift+Enter for newline)`;
-      Office.drawAvatar($('avatar'), a.look);
+      Office.drawAvatar($('avatar'), a.look, a.main);
     }
     renderTeam();
     updateHead();
@@ -238,7 +238,7 @@
   // ---------- "/" command popup ----------
   const slash = { open: false, items: [], idx: 0, cache: new Map(), state: 'idle', error: '' };
   const pop = $('slashPop'), inp = $('input');
-  const SRC_LABEL = { user: 'user', project: 'project', plugin: 'plugin', session: 'session', app: 'office', mock: 'demo' };
+  const SRC_LABEL = { user: 'user', project: 'project', plugin: 'plugin', session: 'session', app: 'kitchen', mock: 'demo' };
   function slashQuery() { const m = /^\/(\S*)$/.exec(inp.value); return m ? m[1].toLowerCase() : null; }
   async function loadCommands(id) {
     slash.state = 'loading'; renderSlash();
@@ -358,7 +358,7 @@
   function openHire(slot) {
     hireSlot = typeof slot === 'number' ? slot : undefined;
     renderTypeOptions(); $('hirePerm').value = '';
-    const first = agents.size === 0; $('hireNote').textContent = first ? 'The first person you hire sits at the manager desk and becomes the main agent.' : '';
+    const first = agents.size === 0; $('hireNote').textContent = first ? 'The first person you hire stands at the pass as head chef and becomes the main agent.' : '';
     const used = new Set([...agents.values()].map((a) => a.name.toLowerCase()));
     $('hireName').value = NAMES.find((n) => !used.has(n.toLowerCase())) || '';
     $('hireCwd').value = defaultCwd;
@@ -372,7 +372,7 @@
   });
   $('fireBtn').addEventListener('click', () => {
     const a = agents.get(selectedId); if (!a) return;
-    if (confirm(`Fire ${a.name}? Their desk and transcript will be removed.`)) send({ type: 'fire', id: a.id });
+    if (confirm(`Fire ${a.name}? Their station and transcript will be removed.`)) send({ type: 'fire', id: a.id });
   });
 
   // ---------- local Claude Code sessions and Cursor CLI chats ----------
@@ -394,7 +394,7 @@
     list.textContent = '';
     $('sessDir').textContent = (st.dir ? 'Read-only from ' + st.dir : '') + SESS_TEXT[sessSrc].note;
     $('sessFull').hidden = !full;
-    $('sessFull').textContent = `The office is full (${Office.MAX_SLOTS} of ${Office.MAX_SLOTS} desks). Fire someone to resume a session here.`;
+    $('sessFull').textContent = `The kitchen is full (${Office.MAX_SLOTS} of ${Office.MAX_SLOTS} stations). Fire someone to resume a session here.`;
     if (st.loading) { list.appendChild(el('p', 'sessMsg', 'Reading your sessions…')); return; }
     if (st.error) { list.appendChild(el('p', 'sessMsg', 'Could not read the sessions: ' + st.error)); return; }
     if (!st.sessions.length) { list.appendChild(el('p', 'sessMsg', SESS_TEXT[sessSrc].empty)); return; }
@@ -410,9 +410,9 @@
         const name = el('div', 'sessName', s.title); name.title = s.title;
         const count = s.hasTranscript === false ? 'no local transcript' : `${s.count} message${s.count === 1 ? '' : 's'}`;
         main.append(name, el('div', 'sessMeta dim', `${ago(s.mtime)} · ${count} · ${s.id.slice(0, 8)}`));
-        const who = open.get(s.id), b = el('button', 'btn small' + (who ? '' : ' green'), who ? 'Open ' + who.name : 'Resume in office');
+        const who = open.get(s.id), b = el('button', 'btn small' + (who ? '' : ' green'), who ? 'Open ' + who.name : 'Resume in kitchen');
         b.type = 'button';
-        b.setAttribute('aria-label', (who ? 'Open ' + who.name + ' for ' : 'Resume in office: ') + s.title);
+        b.setAttribute('aria-label', (who ? 'Open ' + who.name + ' for ' : 'Resume in kitchen: ') + s.title);
         if (who) b.addEventListener('click', () => { $('sessDlg').close(); select(who.id); });
         else { b.disabled = full; b.addEventListener('click', () => { send({ type: 'resume', sessionId: s.id, source: sessSrc }); pendingSelect = true; $('sessDlg').close(); }); }
         li.append(main, b); ul.appendChild(li);

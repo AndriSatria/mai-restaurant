@@ -1,4 +1,4 @@
-/* mAI office - FLAT (top-down) procedural pixel-art renderer, used with ?view=flat.
+/* mAI-restaurant - FLAT (top-down) procedural pixel-art kitchen, used with ?view=flat.
  * (The default view is the isometric renderer in office-iso.js.)
  * Everything is drawn with fillRect on a small logical canvas (384x240) and then
  * blitted to the visible canvas with integer scaling and smoothing disabled.
@@ -10,7 +10,7 @@
   const ROWS = [94, 178];
   const SLOTS = [];
   for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) SLOTS.push({ cx: COLS[c], cy: ROWS[r], row: r, col: c });
-  SLOTS.push({ cx: 350, cy: 178, row: 1, col: 3, mgr: true });   // slot 6: the manager desk (main agent), bottom-right corner
+  SLOTS.push({ cx: 350, cy: 178, row: 1, col: 3, mgr: true });   // slot 6: the pass (head chef), bottom-right corner
   const AISLE = [132, 214];
   const COFFEE = { x: 350, y: 100 };
   const MAX_SLOTS = SLOTS.length;
@@ -51,18 +51,19 @@
   function buildBackground() {
     const bg = document.createElement('canvas'); bg.width = W; bg.height = H;
     const c = bg.getContext('2d');
-    // floor
+    // quarry-tile floor
     for (let ty = 0; ty < 13; ty++) for (let tx = 0; tx < 24; tx++) {
       const y = 40 + ty * 16;
-      R(c, tx * 16, y, 16, 16, (tx + ty) % 2 ? '#d6cbb5' : '#cdc1a9');
-      R(c, tx * 16, y, 16, 1, '#bdb199'); R(c, tx * 16, y, 1, 16, '#bdb199');
+      R(c, tx * 16, y, 16, 16, (tx + ty) % 2 ? '#c86a42' : '#b85c38');
+      R(c, tx * 16, y, 16, 1, '#8a3a22'); R(c, tx * 16, y, 1, 16, '#8a3a22');
     }
     R(c, 0, 40, W, 4, 'rgba(0,0,0,.18)'); R(c, 0, 44, W, 2, 'rgba(0,0,0,.08)');
-    // wall
-    R(c, 0, 0, W, 40, '#6c7aa3'); R(c, 0, 0, W, 4, '#4b5675');
-    for (let x = 0; x < W; x += 16) R(c, x, 4, 1, 24, '#6574a0');
-    R(c, 0, 28, W, 1, '#8f9cc2'); R(c, 0, 29, W, 9, '#4f5b80'); R(c, 0, 38, W, 2, '#2b3149');
-    for (let x = 0; x < W; x += 16) R(c, x, 29, 1, 9, '#47527a');
+    // subway-tile wall
+    R(c, 0, 0, W, 40, '#e8e4dc'); R(c, 0, 0, W, 4, '#b8b2a8');
+    for (let x = 0; x < W; x += 10) R(c, x, 4, 1, 24, '#c8c2b8');
+    for (let y = 12; y < 28; y += 8) R(c, 0, y, W, 1, '#c8c2b8');
+    R(c, 0, 28, W, 1, '#a8a298'); R(c, 0, 29, W, 9, '#9aa0a8'); R(c, 0, 38, W, 2, '#6a7078');
+    for (let x = 0; x < W; x += 16) R(c, x, 29, 1, 9, '#7a8088');
     // windows
     for (const x of [20, 108, 196]) {
       R(c, x - 1, 7, 42, 26, '#2b3149'); R(c, x, 8, 40, 24, '#eef1f8');
@@ -74,34 +75,35 @@
     // clock
     disc(c, 278, 16, 8, '#2b3149'); disc(c, 278, 16, 7, '#f5f5f0');
     R(c, 278, 11, 1, 6, '#222'); R(c, 278, 16, 4, 1, '#222'); R(c, 278, 16, 1, 1, '#e5484d');
-    // poster
-    R(c, 296, 7, 20, 24, '#2b3149'); R(c, 297, 8, 18, 22, '#f2e6c8');
-    R(c, 299, 10, 14, 8, '#3e8ef7'); R(c, 301, 13, 4, 5, '#30a46c'); R(c, 306, 12, 5, 6, '#f5a524');
-    R(c, 299, 21, 14, 1, '#6b5b3a'); R(c, 299, 24, 10, 1, '#6b5b3a'); R(c, 299, 27, 12, 1, '#6b5b3a');
-    // shelf with cups above coffee
-    R(c, 326, 24, 54, 3, '#5e3d27'); R(c, 326, 27, 54, 1, '#3a2515');
-    R(c, 330, 19, 5, 5, '#f5f5f0'); R(c, 335, 20, 1, 3, '#f5f5f0'); R(c, 340, 19, 5, 5, '#e93d82'); R(c, 345, 20, 1, 3, '#e93d82');
-    R(c, 362, 17, 6, 7, '#12a594'); R(c, 370, 19, 5, 5, '#f5a524');
-    // rug under coffee corner
-    R(c, 318, 76, 66, 36, '#7d3f46'); R(c, 320, 78, 62, 32, '#a45560'); R(c, 324, 82, 54, 24, '#8d4650');
-    for (let x = 326; x < 376; x += 6) R(c, x, 84, 3, 20, '#a45560');
-    // coffee counter
-    R(c, 324, 46, 58, 6, '#ead2a8'); R(c, 324, 46, 58, 1, '#fff0d2'); R(c, 324, 52, 58, 19, '#7a5236'); R(c, 324, 70, 58, 2, '#4a2f1d');
-    for (const x of [324, 343, 362, 381]) R(c, x, 54, 1, 15, '#5e3d27');
-    R(c, 330, 58, 3, 1, '#e5c07a'); R(c, 349, 58, 3, 1, '#e5c07a'); R(c, 368, 58, 3, 1, '#e5c07a');
-    // coffee machine
-    R(c, 331, 28, 20, 4, '#242833'); R(c, 332, 32, 18, 15, '#3a3f4f'); R(c, 332, 32, 18, 1, '#555c70');
-    R(c, 335, 35, 3, 3, '#ff5a5a'); R(c, 340, 35, 3, 3, '#5ff2a5');
-    R(c, 337, 40, 8, 3, '#1b1e27'); R(c, 340, 43, 2, 3, '#999');
-    R(c, 336, 46, 10, 1, '#1b1e27'); R(c, 340, 43, 5, 5, '#f5f5f0');
-    // kettle + mugs
-    R(c, 355, 36, 9, 10, '#c8ccd8'); R(c, 355, 36, 9, 2, '#e6e9f2'); R(c, 364, 38, 2, 5, '#9aa0b4'); R(c, 357, 34, 5, 2, '#444');
-    R(c, 369, 42, 5, 4, '#e5484d'); R(c, 375, 42, 5, 4, '#3e8ef7');
+    // hanging pans
+    disc(c, 304, 18, 7, '#8a4a18'); disc(c, 304, 18, 6, '#c87838'); disc(c, 304, 16, 3, '#f0b070');
+    disc(c, 320, 20, 6, '#5a6068'); disc(c, 320, 20, 5, '#c8ccd4');
+    R(c, 303, 8, 2, 4, '#4a5058'); R(c, 319, 10, 2, 4, '#4a5058');
+    // shelf + jars above the fridge
+    R(c, 326, 24, 54, 3, '#6a7078'); R(c, 326, 27, 54, 1, '#3a4048');
+    R(c, 330, 17, 6, 7, '#c84830'); R(c, 332, 16, 2, 2, '#e8e0c8');
+    R(c, 340, 17, 6, 7, '#3e8a4a'); R(c, 342, 16, 2, 2, '#e8e0c8');
+    R(c, 362, 17, 6, 7, '#c8a038'); R(c, 370, 19, 5, 5, '#d84840');
+    // rubber mat under the break corner
+    R(c, 318, 76, 66, 36, '#2a2e36'); R(c, 320, 78, 62, 32, '#3e444e'); R(c, 324, 82, 54, 24, '#333840');
+    for (let x = 326; x < 376; x += 6) R(c, x, 84, 3, 20, '#3e444e');
+    // walk-in fridge (left) + staff-break counter (right)
+    R(c, 324, 30, 28, 42, '#c8ccd4'); R(c, 324, 30, 28, 1, '#e8ecf0'); R(c, 324, 70, 28, 2, '#4a5058');
+    R(c, 328, 36, 16, 22, '#4a5058'); R(c, 330, 40, 12, 14, '#8ec9ff'); R(c, 342, 44, 4, 8, '#f5c542');
+    R(c, 352, 46, 30, 6, '#d2d6dc'); R(c, 352, 46, 30, 1, '#eef1f5'); R(c, 352, 52, 30, 19, '#6e7480'); R(c, 352, 70, 30, 2, '#4a5058');
+    // coffee urn
+    R(c, 356, 32, 14, 15, '#3a3f4f'); R(c, 356, 32, 14, 1, '#555c70');
+    R(c, 359, 35, 3, 3, '#ff5a5a'); R(c, 365, 35, 3, 3, '#5ff2a5');
+    R(c, 360, 43, 6, 5, '#f5f5f0');
+    R(c, 374, 42, 5, 4, '#e5484d');
     // plants
     plant(c, 6, 50); plant(c, 6, 220); plant(c, 368, 218); plant(c, 306, 48);
-    // sign
-    R(c, 346, 8, 22, 9, '#2b3149'); R(c, 347, 9, 20, 7, '#f5c542');
-    R(c, 350, 11, 6, 4, '#7a5236'); R(c, 356, 12, 2, 2, '#7a5236'); R(c, 360, 11, 1, 4, '#7a5236'); R(c, 362, 11, 3, 1, '#7a5236'); R(c, 362, 13, 3, 1, '#7a5236');
+    // STAFF sign (block letters, same footprint as the old CAFE plaque)
+    R(c, 342, 6, 30, 11, '#3a3220'); R(c, 343, 7, 28, 9, '#f5c542');
+    R(c, 345, 9, 3, 5, '#7a5236'); R(c, 349, 9, 3, 1, '#7a5236'); R(c, 349, 11, 3, 1, '#7a5236'); R(c, 349, 13, 3, 1, '#7a5236');
+    R(c, 354, 9, 3, 5, '#7a5236'); R(c, 358, 9, 1, 5, '#7a5236'); R(c, 354, 9, 5, 1, '#7a5236');
+    R(c, 361, 9, 3, 1, '#7a5236'); R(c, 361, 9, 1, 5, '#7a5236'); R(c, 361, 11, 3, 1, '#7a5236'); R(c, 361, 13, 3, 1, '#7a5236'); R(c, 363, 9, 1, 5, '#7a5236');
+    R(c, 366, 9, 3, 5, '#7a5236'); R(c, 366, 9, 3, 1, '#7a5236'); R(c, 366, 13, 3, 1, '#7a5236');
     return bg;
   }
 
@@ -147,12 +149,23 @@
         R(c, cx - 7, top - 2, 14, 5, hair); R(c, cx - 7, top + 3, 2, 3, hair); R(c, cx + 5, top + 3, 2, 3, hair);
         R(c, cx - 6, top + 2, 5, 1, hair); R(c, cx - 5, top - 2, 5, 1, shade(hair, 35));
     }
+    // chef hat sits on top of whatever hair was drawn
+    const tall = face.hat === 'toque', hat = '#f4f1e8', hatD = '#c8c4b8', hatL = '#fffdf6';
+    if (tall) {
+      R(c, cx - 8, top - 3, 16, 5, hat); R(c, cx - 8, top - 3, 16, 1, hatL);
+      R(c, cx - 9, top - 16, 18, 13, hat); R(c, cx - 8, top - 17, 16, 2, hatL);
+      R(c, cx - 9, top - 16, 1, 13, hatD); R(c, cx + 8, top - 16, 1, 13, hatD);
+      for (let i = 0; i < 5; i++) R(c, cx - 6 + i * 3, top - 15, 1, 11, hatD);
+    } else {
+      R(c, cx - 8, top - 3, 16, 5, hat); R(c, cx - 8, top - 3, 16, 1, hatL);
+      R(c, cx - 6, top - 8, 12, 5, hat); R(c, cx - 5, top - 9, 10, 2, hatL); R(c, cx + 5, top - 8, 1, 5, hatD);
+    }
   }
 
   // arm: shoulder -> elbow -> hand; the last bit is skin
   function arm(c, sx, sy, hx, hy, look, side) {
     const ex = sx + side * 2, ey = (sy + hy) / 2 + 2;
-    const ac = shade(look.shirt, -22);
+    const ac = '#d8d4c8';
     line(c, sx, sy, ex, ey, ac, 2);
     line(c, ex, ey, hx, hy - 1, ac, 2);
     R(c, hx - 1, hy - 1, 3, 3, look.skin);
@@ -205,41 +218,33 @@
   }
 
   function drawMonitor(c, cx, cy, state, t, ph, color) {
-    const x0 = cx + 12, y0 = cy - 23;
-    R(c, cx + 11, cy - 24, 16, 14, '#2b2f3b'); R(c, cx + 11, cy - 24, 16, 1, '#4a4f61');
-    R(c, cx + 17, cy - 10, 4, 4, '#3a3f4f'); R(c, cx + 14, cy - 7, 10, 2, '#2b2f3b');
+    // stove + pot (kept the name so call sites and hit boxes stay put)
+    const x0 = cx + 12, y0 = cy - 16;
+    R(c, cx + 10, cy - 10, 20, 8, '#2a2e36'); R(c, cx + 10, cy - 10, 20, 1, '#5a6068');
+    disc(c, cx + 16, cy - 6, 3, '#1a1e24'); disc(c, cx + 24, cy - 6, 3, '#1a1e24');
     if (state === 'working') {
-      R(c, x0, y0, 14, 12, '#0e1f1a');
-      const tick = Math.floor(t * 6 + ph * 5);
-      for (let i = 0; i < 4; i++) {
-        const w = 3 + Math.floor(rnd(tick + i * 7) * 9);
-        R(c, x0 + 1 + (i % 2), y0 + 1 + i * 3, Math.min(w, 11), 1, i % 2 ? '#7fd6ff' : '#5ff2a5');
-      }
-      if (Math.floor(t * 18 + ph) % 6 === 0) R(c, x0, y0, 14, 12, 'rgba(255,255,255,.18)');
-      c.globalAlpha = 0.16; R(c, cx + 8, cy - 7, 20, 13, '#7fd6ff'); c.globalAlpha = 1;
+      const flick = Math.floor(t * 12 + ph * 5) % 2;
+      disc(c, cx + 16, cy - 6, 2 + flick, '#ff8a3a'); disc(c, cx + 24, cy - 6, 1 + flick, '#ffd84a');
+      c.globalAlpha = 0.2; R(c, cx + 8, cy - 7, 22, 10, '#ff8a3a'); c.globalAlpha = 1;
     } else if (state === 'thinking') {
-      R(c, x0, y0, 14, 12, '#1d2a44');
-      const k = Math.floor(t * 3) % 4;
-      for (let i = 0; i < 3; i++) R(c, x0 + 3 + i * 3, y0 + 5, 2, 2, i < k ? '#b7a8ff' : '#33446a');
+      disc(c, cx + 16, cy - 6, 1, '#ffb04a');
     } else if (state === 'done') {
-      R(c, x0, y0, 14, 12, '#143d2a');
-      for (const [dx, dy] of [[3, 6], [4, 7], [5, 8], [6, 7], [7, 6], [8, 5], [9, 4]]) R(c, x0 + dx, y0 + dy - 1, 2, 2, '#6be39b');
+      disc(c, cx + 16, cy - 6, 1, '#6be39b');
     } else if (state === 'error') {
-      R(c, x0, y0, 14, 12, Math.floor(t * 4) % 2 ? '#4a1218' : '#6a1a22');
-      R(c, x0 + 6, y0 + 2, 2, 5, '#fff'); R(c, x0 + 6, y0 + 8, 2, 2, '#fff');
-    } else if (state === 'off') {
-      R(c, x0, y0, 14, 12, '#10131c'); R(c, x0 + 1, y0 + 1, 4, 1, '#2a3040'); R(c, x0 + 1, y0 + 2, 2, 1, '#2a3040');
-    } else { // idle
-      R(c, x0, y0, 14, 12, '#1d2a44');
-      for (const [i, w] of [[0, 8], [1, 5], [2, 9]]) R(c, x0 + 1, y0 + 1 + i * 3, w, 1, '#3a5a8a');
-      if (Math.floor(t * 1.6 + ph) % 2) R(c, x0 + 1, y0 + 10, 2, 1, '#9fe8ff');
+      disc(c, cx + 16, cy - 6, 2, Math.floor(t * 4) % 2 ? '#ff5a5a' : '#b0303c');
     }
-    R(c, cx + 25, cy - 11, 1, 1, color || '#5ff2a5'); // power led
+    R(c, cx + 13, cy - 18, 10, 8, '#d4883a'); R(c, cx + 13, cy - 18, 10, 1, '#f0b060'); R(c, cx + 16, cy - 20, 4, 2, '#f0b060');
+    if (state === 'working' || state === 'thinking') {
+      const s = Math.floor(t * 5) % 3;
+      c.globalAlpha = 0.7; R(c, cx + 16 + s, cy - 24, 2, 2, '#fff'); R(c, cx + 20 - s, cy - 26, 2, 2, '#fff'); c.globalAlpha = 1;
+    }
+    R(c, cx + 28, cy - 8, 1, 1, color || '#ff8a3a');
   }
 
   function drawSeat(c, slot, ag, t) {
     const { cx, cy } = slot;
-    R(c, cx - 9, cy - 28, 18, 18, '#343a50'); R(c, cx - 8, cy - 27, 16, 2, '#4d5575'); R(c, cx - 9, cy - 10, 18, 3, '#2a2f42');
+    R(c, cx - 9, cy - 22, 18, 12, '#5a4030'); R(c, cx - 8, cy - 22, 16, 2, '#7a5840'); R(c, cx - 9, cy - 10, 18, 3, '#3a281c');
+    R(c, cx - 9, cy - 28, 3, 10, '#5a4030'); R(c, cx + 6, cy - 28, 3, 10, '#5a4030');
     const here = ag && !ag.away;
     const st = ag ? ag.state : 'off';
     const ph = ag ? ag.phase : 0;
@@ -260,20 +265,21 @@
       if (act === 'read') by = 1;
       const blink = ((t * 1000 + ph * 3600) % 3600) < 140;
       const look = ag.look;
-      R(c, cx - 7, cy - 24 + by, 14, 20, look.shirt); R(c, cx - 7, cy - 14 + by, 14, 1, shade(look.shirt, -30));
+      R(c, cx - 7, cy - 24 + by, 14, 20, '#f2efe6'); R(c, cx - 7, cy - 14 + by, 14, 1, '#d0ccc0');
+      R(c, cx - 6, cy - 18 + by, 12, 12, look.shirt); R(c, cx - 1, cy - 24 + by, 2, 6, look.shirt);
       R(c, cx - 2, cy - 25 + by, 4, 2, shade(look.skin, -25));
-      drawHead(c, cx + lk, cy - 35 + by, look, { blink, mood, look: lk });
+      drawHead(c, cx + lk, cy - 35 + by, look, { blink, mood, look: lk, hat: (ag.slot === 6 || ag.main) ? 'toque' : 'cap' });
     }
-    // desk
-    R(c, cx - 28, cy - 7, 56, 14, '#b98a56'); R(c, cx - 28, cy - 7, 56, 1, '#dcae74'); R(c, cx - 28, cy + 6, 56, 1, '#8c6339');
-    R(c, cx - 28, cy + 7, 56, 12, '#8c6339'); R(c, cx - 28, cy + 7, 56, 1, '#6e4b28');
-    R(c, cx - 28, cy + 19, 3, 3, '#5e3f22'); R(c, cx + 25, cy + 19, 3, 3, '#5e3f22');
-    R(c, cx - 6, cy + 9, 12, 8, '#7a5230'); R(c, cx - 5, cy + 10, 10, 6, '#946236'); R(c, cx - 1, cy + 12, 2, 1, '#e5c07a');
+    // stainless station
+    R(c, cx - 28, cy - 7, 56, 14, '#d2d6dc'); R(c, cx - 28, cy - 7, 56, 1, '#eef1f5'); R(c, cx - 28, cy + 6, 56, 1, '#6e7480');
+    R(c, cx - 28, cy + 7, 56, 12, '#8a909a'); R(c, cx - 28, cy + 7, 56, 1, '#4a5058');
+    R(c, cx - 28, cy + 19, 3, 3, '#4a5058'); R(c, cx + 25, cy + 19, 3, 3, '#4a5058');
+    R(c, cx - 6, cy + 9, 12, 8, '#6a7078'); R(c, cx - 5, cy + 10, 10, 6, '#8a9098'); R(c, cx - 1, cy + 12, 2, 1, '#c8ccd4');
     R(c, cx - 28, cy + 22, 56, 2, 'rgba(0,0,0,.14)');
     if (ag) R(c, cx - 24, cy + 10, 9, 3, ag.look.shirt);
-    // keyboard + mug
-    R(c, cx - 8, cy - 1, 16, 5, '#cfd3df'); R(c, cx - 8, cy + 3, 16, 1, '#9aa0b4');
-    for (let i = 0; i < 7; i++) { R(c, cx - 7 + i * 2, cy, 1, 1, '#8a90a6'); R(c, cx - 7 + i * 2, cy + 2, 1, 1, '#8a90a6'); }
+    // cutting board + salt
+    R(c, cx - 8, cy - 1, 16, 5, '#d2a06a'); R(c, cx - 8, cy + 3, 16, 1, '#a87840');
+    R(c, cx - 6, cy, 8, 1, '#c8ccd4'); R(c, cx - 8, cy, 2, 1, '#5b3a1e');
     R(c, cx - 24, cy - 4, 5, 5, '#f5f5f0'); R(c, cx - 19, cy - 3, 1, 3, '#f5f5f0'); R(c, cx - 24, cy - 4, 5, 1, '#5b3a1e');
     if (here && (st === 'working' || st === 'thinking') && ag.slot % 2 === 0) { /* steam */
       const s = Math.floor(t * 3) % 2; R(c, cx - 22 + s, cy - 7, 1, 2, 'rgba(255,255,255,.7)'); }
@@ -283,8 +289,8 @@
       const kb = { lx: cx - 4, rx: cx + 4, y: cy + 2 };
       let L = [kb.lx, kb.y], Rr = [kb.rx, kb.y];
       if (st === 'working') {
-        const f = Math.floor(t * 10 + ph * 3);
-        L = [kb.lx - (f % 3 === 0 ? 1 : 0), kb.y + (f % 2)]; Rr = [kb.rx + (f % 3 === 1 ? 1 : 0), kb.y + ((f + 1) % 2)];
+        const a = t * 9 + ph * 4, chop = Math.abs(Math.sin(t * 10 + ph * 3));
+        L = [kb.lx, kb.y - chop * 6]; Rr = [kb.rx + Math.cos(a), kb.y + Math.sin(a)];
       } else if (st === 'thinking') { Rr = [cx + 3, cy - 21 + by]; }
       else if (st === 'done') { const b = Math.floor(Math.abs(Math.sin(t * 6)) * 3); L = [cx - 12, cy - 32 - b]; Rr = [cx + 12, cy - 32 - b]; }
       else if (st === 'error') { const j = Math.floor(t * 8) % 2; L = [cx - 8 - j, cy - 30]; Rr = [cx + 8 + j, cy - 30]; }
@@ -314,12 +320,13 @@
     R(c, x - 7, fy - 1, 14, 2, 'rgba(0,0,0,.18)');
     R(c, x - 5, fy - 10, 4, 9 - (ph ? 1 : 0), look.pants); R(c, x + 1, fy - 10, 4, 9 - (ph ? 0 : 1), look.pants);
     R(c, x - 5, fy - 2 - (ph ? 1 : 0), 5, 2, '#222'); R(c, x + 1, fy - 2 - (ph ? 0 : 1), 5, 2, '#222');
-    R(c, x - 7, fy - 24, 14, 15, look.shirt); R(c, x - 7, fy - 11, 14, 1, shade(look.shirt, -30));
+    R(c, x - 7, fy - 24, 14, 15, '#f2efe6'); R(c, x - 7, fy - 11, 14, 1, '#d0ccc0');
+    R(c, x - 6, fy - 18, 12, 8, look.shirt); R(c, x - 1, fy - 24, 2, 6, look.shirt);
     R(c, x - 2, fy - 25, 4, 2, shade(look.skin, -25));
     const blink = ((t * 1000 + ag.phase * 3600) % 3600) < 140;
     const mood = ag.state === 'error' ? 'worried' : (ag.mode === 'drink' || ag.mode === 'chat') ? 'happy' : 'normal';
     const nod = ag.mode === 'chat' && ag.talk == null && Math.floor(t * 3) % 4 === 0 ? 1 : 0;
-    drawHead(c, x, fy - 36 + nod, look, { blink, mood });
+    drawHead(c, x, fy - 36 + nod, look, { blink, mood, hat: (ag.slot === 6 || ag.main) ? 'toque' : 'cap' });
     const sw = walking ? (ph ? 1 : -1) : 0;
     if (ag.mode === 'drink') {
       const sip = Math.floor(t * 1.5) % 2;
@@ -421,10 +428,10 @@
   function render(canvas, S, U, scene) {
     const t = scene.t;
     lc.drawImage(bg, 0, 0);
-    // steam over the coffee machine
+    // steam over the staff coffee urn
     for (let i = 0; i < 3; i++) {
       const p = ((t * 8 + i * 4) % 12);
-      lc.globalAlpha = 0.6 * (1 - p / 12); R(lc, 341 + Math.sin(t * 2 + i * 2) * 1.5, 38 - p, 2, 2, '#fff');
+      lc.globalAlpha = 0.6 * (1 - p / 12); R(lc, 360 + Math.sin(t * 2 + i * 2) * 1.5, 30 - p, 2, 2, '#fff');
     }
     lc.globalAlpha = 1;
     const bySlot = {}; scene.entries.forEach((e) => { bySlot[e.slot] = e; });
@@ -489,10 +496,11 @@
     return [{ x: s.cx + 33, y: s.cy + 2 }, { x: s.cx + 38, y: ay }, { x: spot.x, y: ay }, { x: spot.x, y: spot.y }];
   }
 
-  function drawAvatar(canvas, look) {
+  function drawAvatar(canvas, look, main) {
     const c = canvas.getContext('2d'); c.clearRect(0, 0, canvas.width, canvas.height);
-    R(c, 3, 20, 14, 8, look.shirt); R(c, 8, 19, 4, 2, shade(look.skin, -25));
-    drawHead(c, 10, 8, look, { mood: 'happy' });
+    R(c, 3, 20, 14, 8, '#f2efe6'); R(c, 4, 22, 12, 6, look.shirt);
+    R(c, 8, 19, 4, 2, shade(look.skin, -25));
+    drawHead(c, 10, 8, look, { mood: 'happy', hat: main ? 'toque' : 'cap' });
   }
 
   window.OfficeFlat = { W, H, SLOTS, MAX_SLOTS, MGR: SLOTS.length - 1, render, hitTest, walkPath, SPOTS, drawAvatar, COFFEE, AISLE,

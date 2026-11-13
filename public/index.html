@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>mAI office</title>
+  <title>mAI-restaurant</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header id="topbar">
-    <div class="logo">▣ mAI office</div>
+    <div class="logo">▣ mAI-restaurant</div>
     <span id="modeBadge" class="badge">…</span>
     <span id="conn" class="badge off">offline</span>
     <div class="spacer"></div>
-    <button id="sessBtn" class="btn" title="Browse the Claude Code sessions and Cursor CLI chats on this computer and resume one at a desk">Sessions</button>
+    <button id="sessBtn" class="btn" title="Browse the Claude Code sessions and Cursor CLI chats on this computer and resume one at a station">Sessions</button>
     <button id="hireBtn" class="btn green">＋ Hire agent</button>
     <button id="fireBtn" class="btn red" disabled>✖ Fire agent</button>
   </header>
@@ -24,16 +24,16 @@
       <div id="chatEmpty">
         <div class="big">☝</div>
         <p>Click a pixel person to open their chat.</p>
-        <p class="dim">No agents yet? Hit <b>Hire agent</b> or click an empty desk.</p>
+        <p class="dim">No agents yet? Hit <b>Hire agent</b> or click an empty station.</p>
       </div>
       <div id="chatBody" hidden>
         <div id="chatHead">
           <canvas id="avatar" width="20" height="26"></canvas>
           <div class="meta">
-            <div class="nameRow"><span id="chatName">—</span><span id="chatType" class="typebadge">—</span><span id="mainBadge" class="mainbadge" title="Main agent: sits at the manager desk" hidden>★ main</span></div>
+            <div class="nameRow"><span id="chatName">—</span><span id="chatType" class="typebadge">—</span><span id="mainBadge" class="mainbadge" title="Main agent: stands at the pass as head chef" hidden>★ main</span></div>
             <div id="chatCwd" class="dim">—</div>
           </div>
-          <button type="button" id="mainBtn" class="btn small" title="Move this agent to the manager desk and make them the main agent (the current main swaps to this desk)" hidden>★ Make main</button>
+          <button type="button" id="mainBtn" class="btn small" title="Move this agent to the pass as head chef (the current head chef swaps to this station)" hidden>★ Make main</button>
           <span id="chatState" class="pill idle">idle</span>
         </div>
         <details id="teamBox" open hidden>
@@ -64,7 +64,7 @@
       <label>Name <input id="hireName" maxlength="24" required autocomplete="off"></label>
       <fieldset id="typeChoice"><legend>Agent type</legend><div id="typeOptions"></div></fieldset>
       <label>Working directory <input id="hireCwd" autocomplete="off" spellcheck="false"></label>
-      <label>Permission mode <select id="hirePerm" title="Plan: the agent plans first (Claude Code --permission-mode plan) and everybody gathers at the round table"><option value="">Usual (accept edits for Claude)</option><option value="default">Default (tools not pre-approved are denied)</option><option value="plan">Plan (plan first, gather at the round table)</option></select></label>
+      <label>Permission mode <select id="hirePerm" title="Plan: the agent plans first (Claude Code --permission-mode plan) and everybody gathers at the pass"><option value="">Usual (accept edits for Claude)</option><option value="default">Default (tools not pre-approved are denied)</option><option value="plan">Plan (plan first, gather at the pass)</option></select></label>
       <div id="hireNote" class="dim"></div>
       <div class="row">
         <button type="button" id="hireCancel" class="btn">Cancel</button>

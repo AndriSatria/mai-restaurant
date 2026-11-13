@@ -1,7 +1,7 @@
 {
-  "name": "mai-office",
+  "name": "mai-restaurant",
   "version": "0.1.0",
-  "description": "mAI office - a pixel-art office where every AI coding agent (Claude Code, Cursor CLI) is an animated little person you can click and talk to.",
+  "description": "mAI-restaurant - a pixel-art kitchen where every AI coding agent (Claude Code, Cursor CLI) is a cook you can click and talk to.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -1,33 +1,33 @@
-# mAI office: technical details
+# mAI-restaurant: technical details
 
 The short version is in the [README](../README.md). This file keeps the full notes: rendering, adapter internals, event shapes, tests.
 
-**mAI office** is a pixel-art office where every **Claude Code** / **Cursor** agent is an animated little person at its own desk.
-Click a person, type to them, and your message goes to that agent's Claude Code session; the reply streams back
+**mAI-restaurant** is a pixel-art kitchen where every **Claude Code** / **Cursor** agent is a cook at its own station.
+Click a cook, type to them, and your message goes to that agent's Claude Code session; the reply streams back
 into a chat panel and a speech bubble over their head.
 
-![office](../screenshots/06-done-with-reply-bubble.png)
+![kitchen](../screenshots/hd/kitchen-01-idle.png)
 
 * **Backend:** Node.js, `express` + `ws`. **Frontend:** one HTML page + plain `<canvas>`, no build step.
-* **Art:** 100% procedural pixel-art **isometric (2:1 dimetric)** office drawn on a 400×264 logical `<canvas>`
+* **Art:** 100% procedural pixel-art **isometric (2:1 dimetric)** kitchen drawn on a 400×264 logical `<canvas>`
   and upscaled by a whole-number factor with `imageSmoothingEnabled = false`. No assets. (`?view=flat` = the old top-down view.)
 * **Agent types** (chosen per agent when hiring): `claude` (Claude Code CLI), `cursor` (Cursor CLI agent) or `mock`
   (simulated, no CLI). Each agent shows a small type badge under its name and in the chat header.
-* **Lively idle agents:** idle people stretch, read, look around, sip coffee, or meet up for a chat by the coffee machine.
+* **Lively idle agents:** idle cooks stretch, read, look around, sip coffee, or meet up for a chat by the walk-in fridge.
 
 ## Isometric view
 
-The office is a 12×12 tile room seen from the south: diamond tile floor (32×16 px tiles), two back walls (windows,
-wall clock, posters, whiteboard, a shelf with a CAFE sign), 6 desks in two rows (monitor, keyboard, mug, lamp,
-drawers, chair), a larger **manager desk** for the main agent, a **round table** with 8 chairs in the open middle, plants, and a coffee corner (counter, machine, kettle, mugs, rug).
+The kitchen is a 12×12 tile room seen from the south: quarry-tile floor (32×16 px tiles), two back walls (subway tiles,
+windows, wall clock, hanging pans, a hood vent, a shelf with a STAFF sign), 6 stainless cook stations in two rows (stove, pot,
+cutting board, stool), a longer **pass** for the head chef, a **planning table** with 8 stools in the open middle, herb pots, and a staff-break corner (walk-in fridge, coffee urn, mugs, rubber mat).
 
 * **Projection:** `sx = ox + (x − y)·16`, `sy = oy + (x + y)·8 − z`. +x runs down-right, +y down-left. Everything is
   drawn with `fillRect` / a tiny pixel-exact polygon filler, so edges are crisp and neighbouring faces never leave gaps.
   The canvas is scaled by an **integer** factor only (×3 at 1600×900).
 * **Characters** are drawn in a 3/4 view with **4 facings** (SE, SW, NW, NE; two are mirrored versions of the others,
   and back views show the back of the head). All states and idle activities work in every facing: idle bob, thinking
-  (hand on chin + dots), working (typing + tool chip + live monitor), done (arms up, ✓), error (`!`, red monitor),
-  stretch, read, look around, coffee sip, and the two-person chat on the rug.
+  (hand on chin + dots), working (chopping or stirring + tool chip + stove flame and steam), done (arms up, ✓), error (`!`, red flame),
+  stretch, read, look around, coffee sip, and the two-person chat on the mat. The head chef wears a tall toque; line cooks wear chef whites, a coloured apron and a smaller cap.
 * **Walking:** agents walk on the tile grid. `walkPath(slot, spot)` is a 4-neighbour BFS over a `blocked[y][x]` grid
   (desks, chairs, counter, plants), so they never cut through furniture; the facing follows the walking direction.
 * **Depth sorting:** objects (chairs, desks, plants, people) have tile footprints; an object is drawn before another when
@@ -39,35 +39,33 @@ drawers, chair), a larger **manager desk** for the main agent, a **round table**
   scaled canvas, anchored to projected points.
 * **Flat view:** `http://localhost:3000/?view=flat` still gives the original top-down renderer (`office-flat.js`); it shows helpers working from their own desks.
 
-## Manager desk, monitors and the round table
+## The pass, cook stations and the planning table
 
-![manager desk and round table](../screenshots/20-manager-desk-and-round-table.png)
+![the pass and planning table](../screenshots/hd/kitchen-03-headchef.png)
 
-**Main agent = manager desk.** The back-right corner has one bigger walnut desk with a brass MANAGER sign, one screen, a folder stack, a pen cup, a
-leather chair and a rug. The **first agent you hire is the main agent** and sits there (clicking the empty manager desk opens
-the Hire dialog with a note). Everyone else gets a regular desk. Select any other agent and press **★ Make main** to promote
-them: they swap desks with the current main agent (persisted; the selected main agent shows a **★ main** badge). Firing the
-main agent promotes the next one automatically. The manager is also the last person picked as a helper in `/code-review` style jobs.
+**Main agent = the pass (head chef).** The back-right corner has a longer stainless pass with a brass PASS sign, a ticket rail,
+a service bell, a heat lamp, a plate stack and a short-backed stool. The **first agent you hire is the main agent** (head chef, tall toque)
+and stands there (clicking the empty pass opens the Hire dialog with a note). Everyone else gets a regular cook station. Select any other
+agent and press **★ Make main** to promote them: they swap stations with the current head chef (persisted; the selected main agent shows a **★ main** badge). Firing the
+main agent promotes the next one automatically. The head chef is also the last person picked as a helper in `/code-review` style jobs.
 
-**Monitors face the person.** Every regular monitor now sits *in front of* the seated person: its screen faces them and
-its **back faces the camera**. The state therefore can't be read off the screen anymore, so it is shown three other ways:
-a glow halo + status LED + light bar on the back of the monitor (violet pulse = thinking, flickering green/cyan = working,
-steady green = done, flashing red = error, dim blue = idle), the same colour washing over the desk top, the keyboard and the
-person's face, and the usual tool chip over the head. The manager sits with their back to the camera facing one screen
-that faces the manager (and so the camera), where the screen itself shows the state. Depth sorting is footprint based so the monitor correctly overlaps the person
-where it is in front of them.
+**Stoves face the cook.** Every regular station has a stove and a pot *in front of* the seated cook: the cook faces the burners,
+and the camera sees the far side of the pot. The working state is shown as flame and steam (flickering orange = working,
+warm pulse = thinking, steady green = done, flashing red = error, dim = idle), the same colour washing over the cutting board
+and the cook's face, and the usual tool chip over the head. The head chef sits with their back to the camera facing the ticket rail
+and the heat lamp, which glow in the same state colours.
 
-![monitors](../screenshots/21-monitors-face-the-people.png)
+![cooks at work](../screenshots/hd/kitchen-02-working.png)
 
-**Round table + plan mode.** The middle of the room has a round table with 8 chairs (a rug, paper pads and a speaker puck).
+**Planning table + plan mode.** The middle of the room has a stainless table with a butcher-block inset, 8 stools, order tickets and a recipe book.
 When a Claude Code agent goes into **plan mode** the team gathers there:
 
 | Step | What happens |
 | --- | --- |
 | Detect | init event `permissionMode: "plan"` (the agent is run with `--permission-mode plan`), or an `ExitPlanMode` tool call. `/plan <task>` runs a one-shot plan-mode run for any agent type (the Cursor adapter passes `--mode plan`, best effort). |
-| Gather | the plan owner (main or any agent) walks to the table; every **idle / done** colleague (not helping, nothing queued, not selected) walks over and sits. Busy workers and helpers stay at their desks. Coffee and chat trips are suppressed while the team is gathered. Paths avoid furniture. |
+| Gather | the plan owner (main or any agent) walks to the table; every **idle / done** colleague (not helping, nothing queued, not selected) walks over and sits. Busy workers and helpers stay at their stations. Coffee and chat trips are suppressed while the team is gathered. Paths avoid furniture. |
 | Planning | a floating plan document in the middle with sparkles, thinking bubbles ("…", "?") over the people, a "planning…" pill and an amber ring on the floor. |
-| Ready | `ExitPlanMode` (or the end of the plan-mode run) turns the document green with a check, shows **✓ PLAN READY** and a summary bubble over the table; the team cheers. After ~6 s everyone walks back to their desk. |
+| Ready | `ExitPlanMode` (or the end of the plan-mode run) turns the recipe card green with a check, shows **✓ PLAN READY** and a summary bubble over the table; the team cheers. After ~6 s everyone walks back to their station. |
 
 ![plan gathering](../screenshots/22-plan-mode-gathering.png)
 ![plan ready](../screenshots/23-plan-ready-summary.png)
@@ -78,8 +76,8 @@ Turn plan mode on per agent: the **Permission mode** select in the Hire dialog, 
 ## Team collaboration: colleagues help each other
 
 One project, several agents: when an agent runs work in parallel (a Claude `Task`/`Agent` fan-out such as `/code-review`, Cursor helper tasks,
-or the mock's simulated team) the helpers are **the people who already work in the office**. Nobody pops in or fades out, and **nobody walks over to the
-lead**: every helper does the job **at their own desk**, and the exchange is drawn between the desks.
+or the mock's simulated team) the helpers are **the people who already work in the kitchen**. Nobody pops in or fades out, and **nobody walks over to the
+lead**: every helper does the job **at their own station**, and the exchange is drawn between the stations.
 
 ![4 helpers](../screenshots/15-team-code-review-4-helpers.png)
 ![peer talk](../screenshots/16-team-peer-conversation.png)
@@ -87,16 +85,16 @@ lead**: every helper does the job **at their own desk**, and the exchange is dra
 ![handoff](../screenshots/18-team-result-handoff.png)
 
 * **Who helps:** each subagent is assigned to an existing colleague, **idle ones first** (fewest times helped first). If that person is away (coffee, chatting)
-  they **walk back to their own desk and sit** before the job shows; idle wandering is suppressed while they help and resumes afterwards. If nobody is idle a
-  new regular, persistent agent is **auto-hired** (max 6 desks + the manager desk, mock type): it **walks in through the entrance door to its own desk** and stays there. If the office
-  is full the subagent waits (pending) and is assigned when somebody frees up. In the flat view helpers also just work from their own desks.
-* **Helping status (at the helper's desk):** a temporary **role badge + coloured lanyard/ID card** (no new look), a **tool chip**, typing animation, monitor flicker,
-  a glowing pad on the floor in front of the desk and a **"helping <lead> · role"** tag under the name.
-* **Communication without moving:** **dotted isometric lines** run along the aisles from the lead's desk to every helper desk (one lane per helper so lines do
+  they **walk back to their own station and sit** before the job shows; idle wandering is suppressed while they help and resumes afterwards. If nobody is idle a
+  new regular, persistent agent is **auto-hired** (max 6 stations + the pass, mock type): it **walks in through the entrance door to its own station** and stays there. If the kitchen
+  is full the subagent waits (pending) and is assigned when somebody frees up. In the flat view helpers also just work from their own stations.
+* **Helping status (at the helper's station):** a temporary **role badge + coloured lanyard/ID card** (no new look), a **tool chip**, typing animation, monitor flicker,
+  a glowing pad on the floor in front of the station and a **"helping <lead> · role"** tag under the name.
+* **Communication without moving:** **dotted isometric lines** run along the aisles from the lead's station to every helper station (one lane per helper so lines do
   not lie on top of each other; routes are checked in `test-iso` never to cross furniture). A **paper** flies lead → helper along its line at hand-off, and an
-  **envelope with a short summary bubble** ("found 3 issues", failures show `!`) flies helper → lead when it finishes; small bubbles appear at each desk.
-  Inferred peer interactions (two helpers on the same file) are a **white dotted line + `?`/`!`/`…` bubbles + a letter between the two desks**.
-* **Wrap-up (replaces the huddle):** when the last helper has reported, every helper desk celebrates **at the same time** (gold ring, sparkles, check mark, arms up),
+  **envelope with a short summary bubble** ("found 3 issues", failures show `!`) flies helper → lead when it finishes; small bubbles appear at each station.
+  Inferred peer interactions (two helpers on the same file) are a **white dotted line + `?`/`!`/`…` bubbles + a letter between the two stations**.
+* **Wrap-up (replaces the huddle):** when the last helper has reported, every helper station celebrates **at the same time** (gold ring, sparkles, check mark, arms up),
   the lead gets a "team wrap-up" chip and the consolidated bubble. Afterwards everybody simply drops the helper state, still sitting, and idle behaviour resumes.
 * **Roles** (`lib/roles.js`) come from the Task input (`subagent_type`, then description, then prompt) by keyword: `security` (red), `performance`
   (orange), `tests` (green), `style` (purple), `docs` (blue), `architecture` (pink), `explore` (cyan), otherwise `general` (grey); each has a small icon in its badge.
@@ -105,9 +103,9 @@ lead**: every helper does the job **at their own desk**, and the exchange is dra
 * **Inferred interactions.** Claude subagents cannot message each other, so these are *inferred from the event stream* and labelled **inferred** (tooltip on
   the person, the "Team activity" feed and this file). They never change what the agents actually do:
   1. two helpers that touch the **same file/pattern** within a time window turn their heads toward each other and trade `?` / `!` / `…` bubbles over the
-     dotted desk-to-desk line (throttled: one pair at a time, a cooldown per pair, max 6 per run);
+     dotted station-to-station line (throttled: one pair at a time, a cooldown per pair, max 6 per run);
   2. when a helper ends it **hands an envelope to the lead** with a short summary, plus a **letter to another helper** if its result text mentions that helper's role;
-  3. the lead **announces the plan** (clipboard icon, a paper per helper) at the start and holds the **team wrap-up** (celebration at every helper desk, "team wrap-up" chip,
+  3. the lead **announces the plan** (clipboard icon, a paper per helper) at the start and holds the **team wrap-up** (celebration at every helper station, "team wrap-up" chip,
      consolidated bubble) once the last helper has reported.
 * **Chat panel:** every helper is one collapsed line (`↳ helper 'label' started · role · helperName · N steps`) and a collapsible **👥 Team activity**
   feed per lead lists the plan, assignments, peer chats, handoffs, mentions and the wrap-up; inferred entries carry an `inferred` tag with the reason.
@@ -152,34 +150,34 @@ HARNESS_MODE=claude npm start      # real Claude Code (needs `claude` installed 
 HARNESS_MODE=cursor npm start      # Cursor CLI agent (needs `cursor-agent` installed & logged in)
 ```
 
-All three types can be mixed in one office - pick the type per agent in the **Hire agent** dialog
+All three types can be mixed in one kitchen - pick the type per agent in the **Hire agent** dialog
 (types whose CLI isn't found are flagged "CLI not found"). The type is persisted with the agent.
 
 ### Resume your local Claude Code sessions and Cursor CLI chats
 
-The office can read the Claude Code sessions and Cursor CLI chats on your own PC and continue one at a desk.
+The kitchen can read the Claude Code sessions and Cursor CLI chats on your own PC and continue one at a desk.
 
 ```bash
-git clone https://github.com/AndriSatria/mai-office
-cd mai-office
+git clone https://github.com/AndriSatria/mai-restaurant
+cd mai-restaurant
 npm install
 npm run start:claude
 ```
 
-Open http://127.0.0.1:3000 and click **Sessions**, then the **Claude Code** or **Cursor CLI** tab (arrow keys switch tabs). Sessions are grouped by project folder, newest first. **Resume in office**
+Open http://127.0.0.1:3000 and click **Sessions**, then the **Claude Code** or **Cursor CLI** tab (arrow keys switch tabs). Sessions are grouped by project folder, newest first. **Resume in kitchen**
 puts a Claude Code agent at a free desk with the recent history in its chat; your next message runs
 `claude -p ... --resume <session id>` in that project folder, so Claude picks up where you left off.
 
 * Sessions are read from `~/.claude/projects/*/*.jsonl` (or `$CLAUDE_CONFIG_DIR/projects`). The folder is only read, never written.
 * Cursor CLI chats: each chat's `meta.json` (title, folder, times) is read from `~/.cursor/chats/<md5 of folder>/<chat id>/`
   (or `$CURSOR_CONFIG_DIR/chats`, `$XDG_CONFIG_HOME/cursor/chats`), the history from
-  `~/.cursor/projects/<folder slug>/agent-transcripts/<chat id>/<chat id>.jsonl` (or `$CURSOR_DATA_DIR`). **Resume in office** puts a Cursor
+  `~/.cursor/projects/<folder slug>/agent-transcripts/<chat id>/<chat id>.jsonl` (or `$CURSOR_DATA_DIR`). **Resume in kitchen** puts a Cursor
   agent at a free desk; your next message runs `agent -p ... --resume <chat id>` in the chat's folder (the CLI only finds a chat from
   the folder it was started in). `store.db` (SQLite) is never opened, so no extra dependency.
 * Not listed: Cursor **editor** chats (they live in the editor's `state.vscdb`; `agent --resume` can't open them, the dialog says so),
   chats without `meta.json` or a `cwd` in it (older CLI builds; the folder can't be recovered from the md5 name), subagent chats,
   never-used chats, and chats whose folder name doesn't match `md5(cwd)`. A chat with no transcript file is listed as "no local transcript".
-* If the office is full (7 people), fire someone first.
+* If the kitchen is full (7 people), fire someone first.
 * The list is only served to `localhost` / `127.0.0.1` pages. Do not bind `HOST` to a public address on a machine with sessions you care about.
 
 ![Claude sessions browser](../screenshots/hd/13-claude-sessions-browser-hd.png)
@@ -199,7 +197,7 @@ The list is read (never written) from:
 | plugins | `~/.claude/plugins/installed_plugins.json` install paths: `commands/*.md`, `skills/*/SKILL.md`, as `/plugin:name` | `plugin` |
 | Claude Code itself | `slash_commands` + `skills` from the last run's init event, minus interactive-only ones (`/clear`, `/model`, …) | `session` |
 | Cursor agents | the folders `cursor-agent` loads: `~/.cursor/commands/*.md`, `~/.claude/commands/*.md`, `<agent folder>/.cursor/commands/*.md`, `<agent folder>/.claude/commands/*.md` (flat, no sub folders), skills in `<agent folder>/.cursor/skills`, `<agent folder>/.claude/skills`, `~/.cursor/skills`, `~/.claude/skills` | `project` / `user` |
-| the office | `/plan <task>` (one plan-mode run), mock agents also get `/team` | `office` / `demo` |
+| the kitchen | `/plan <task>` (one plan-mode run), mock agents also get `/team` | `kitchen` / `demo` |
 
 The description is the frontmatter `description:` or the first line of the file; `argument-hint:` is shown next to
 the name. For Cursor, the CLI's own commands (`/model`, `/resume`, `/plan`, …) are interactive-only and its init event
@@ -210,7 +208,7 @@ with `-p` depends on the version. The list is served at `GET /api/agents/:id/com
 Under the box a line shows the agent's permission mode, like the CLI: `▸▸ accept edits on (shift+tab to cycle)`.
 Shift+Tab in the box (or a click on the line) cycles `default → acceptEdits → plan → default`; `bypassPermissions`
 joins the cycle only with `HARNESS_ALLOW_BYPASS=1`. The mode is saved per agent and passed as `--permission-mode` on
-the next run. Plan mode still gathers the team at the round table.
+the next run. Plan mode still gathers the team at the pass.
 
 Cursor agents cycle `default → plan → ask → default`, mapped to the print-mode flags in `agent --help`:
 
@@ -218,7 +216,7 @@ Cursor agents cycle `default → plan → ask → default`, mapped to the print-
 | --- | --- | --- |
 | `default` | none | edits are only proposed, not applied ([headless docs](https://cursor.com/docs/cli/headless)) |
 | `force` | `--force` | applies edits and runs commands; joins the cycle only with `HARNESS_ALLOW_BYPASS=1` |
-| `plan` | `--mode plan` | read-only planning; the team gathers at the round table |
+| `plan` | `--mode plan` | read-only planning; the team gathers at the pass |
 | `ask` | `--mode ask` | read-only questions and answers |
 
 `--auto-review` is not offered: it asks before some tool calls, and a headless run can't answer.
@@ -229,7 +227,7 @@ Cursor agents cycle `default → plan → ask → default`, mapped to the print-
 
 ### Chat panel (Claude Code style)
 
-The transcript reads like the Claude Code terminal in the office palette: `> prompt` on a band, `●` + markdown for replies
+The transcript reads like the Claude Code terminal in the kitchen palette: `> prompt` on a band, `●` + markdown for replies
 (headings, bold/italic, inline code, fenced code with a language label, lists, links, tables), `● Read(src/app.js)` tool lines
 with a dim `⎿ Read 120 lines` result (long output folds to `… +N lines`, click or Enter to expand), +/- diffs for Edit/Write with
 file line numbers when Claude sends a `structuredPatch`, a checklist for TodoWrite, `● Agent(label)` helpers grouped on one rail with
@@ -245,13 +243,13 @@ Cursor agents get the same tool lines and output (no diffs or todos: its stream 
 
 | Action | How |
 | --- | --- |
-| Select an agent | Click the person (or their desk). Chat panel opens on the right. |
+| Select an agent | Click the cook (or their station). Chat panel opens on the right. |
 | Talk to it | Type in the box, **Enter** to send (Shift+Enter = newline). Messages sent while it's busy are queued. |
-| Hire | **＋ Hire agent** (or click an empty desk): name, agent type (Claude Code / Cursor / Mock), working directory, permission mode (normal / plan). Up to 7 people: 6 desks + the manager desk (the first hire). An older data file with more people is trimmed on load; the full file is kept next to it as `.bak`. |
+| Hire | **＋ Hire agent** (or click an empty station): name, agent type (Claude Code / Cursor / Mock), working directory, permission mode (normal / plan). Up to 7 people: 6 stations + the pass (the first hire, the head chef). An older data file with more people is trimmed on load; the full file is kept next to it as `.bak`. |
 | Fire | Select an agent, **✖ Fire agent**. |
 | Stop a run | **■ Stop** in the chat panel (kills the CLI process). |
-| Make main | Select an agent, **★ Make main** (swaps desks with the current main agent at the manager desk). |
-| Plan mode | **📋 Plan** toggle in the chat header, or type `/plan <task>` (one-shot). The team gathers at the round table. |
+| Make main | Select an agent, **★ Make main** (swaps stations with the current head chef at the pass). |
+| Plan mode | **📋 Plan** toggle in the chat header, or type `/plan <task>` (one-shot). The team gathers at the pass. |
 
 Agent states and what you see:
 
@@ -259,9 +257,9 @@ Agent states and what you see:
 | --- | --- | --- |
 | idle | nothing running | subtle bob + blinking, plus random idle activities (below) |
 | thinking | run started / waiting on model | thought bubble with animated dots, hand on chin |
-| working | tool use or streaming text | typing arms, flickering code on the monitor, green chip with the tool name (`Bash`, `Edit`, …) |
+| working | tool use or streaming text | chopping or stirring, flame and steam on the stove, green chip with the tool name (`Bash`, `Edit`, …) |
 | done | `result` event | green ✓, sparkles, arms up, smiling |
-| error | CLI/run error | red `!`, worried face, red monitor, error shown in chat + bubble |
+| error | CLI/run error | red `!`, worried face, red flame, error shown in chat + bubble |
 
 ### Idle behaviour
 
@@ -272,10 +270,10 @@ Agents that are idle and not selected/hovered pick a random activity every ~8-22
 | stretch | arms up, yawn |
 | read | holds a little book, turns pages, looks down |
 | look around | head/eyes glance left and right |
-| coffee | walks to the coffee machine, sips from a mug, walks back |
-| chat | two idle agents walk to the coffee machine and talk, alternating small speech-bubble icons (`...`, `!`, `?`, ♥, ♪) |
+| coffee | walks to the staff-break corner (walk-in fridge and coffee urn), sips from a mug, walks back |
+| chat | two idle cooks walk to the staff-break corner and talk, alternating small speech-bubble icons (`...`, `!`, `?`, ♥, ♪) |
 
-Only one coffee/chat trip at a time. Selecting an agent or giving it work (state ≠ idle) sends it back to its desk
+Only one coffee/chat trip at a time. Selecting an agent or giving it work (state ≠ idle) sends it back to its station
 (a chat ends for both). URL flags: `?wander=off` disables all idle behaviour, `?wander=fast` makes it happen every few seconds.
 For demos/tests the console exposes `harness.forceActivity(id, 'stretch'|'read'|'look'|'coffee'|'chat', partnerId)`.
 
@@ -358,7 +356,7 @@ lib/adapters/mock.js      simulated agent
 lib/tool-data.js          the capped tool input/result fields the chat draws (paths, commands, old/new strings, todos, patches)
 lib/adapters/index.js     adapter registry, per-type availability, default type
 public/index.html, style.css
-public/js/office-iso.js   isometric renderer (default): projection, furniture, 4-facing characters, depth sort, hit test, pathfinding
+public/js/office-iso.js   isometric kitchen renderer (default): projection, furniture, 4-facing characters, depth sort, hit test, pathfinding
 public/js/office-flat.js  the original top-down renderer (`?view=flat`); also supplies shared bubble/icon helpers
 public/js/chatfmt.js      chat formatting: markdown parser, diffs, tool/todo/helper lines (also loaded by scripts/test-chat.js)
 public/js/app.js          WebSocket client, chat panel, wandering logic, plan-mode gathering (`updateMeeting`)
@@ -390,7 +388,7 @@ scale (×7 at DPR 2), so nothing is resampled; the script asserts this before ca
 
 ## Known limitations / ideas
 
-* Max 7 agents (6 desks + the manager desk); fixed office layout; the isometric camera is fixed (no rotation/zoom); bubbles of different agents can overlap.
+* Max 7 agents (6 stations + the pass); fixed kitchen layout; the isometric camera is fixed (no rotation/zoom); bubbles of different agents can overlap.
 * Claude and Cursor modes are untested with the real CLIs; plan-mode detection (`permissionMode: plan` in init, `ExitPlanMode` tool use) is only exercised through `scripts/fake-claude.js`, Cursor flags are from `agent --help` but not run logged in; no tool-permission prompts in headless mode; one process per message.
 * No auth; long transcripts are capped at 300 messages per agent.
 * Next: `/clear`/new-session button, per-agent model settings, sound, day/night cycle.

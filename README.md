@@ -1,16 +1,16 @@
-# mAI office
+# mAI-restaurant
 
-A pixel office on your own machine that wraps Claude Code and the Cursor CLI. Each agent is a person at a desk: you click them, type, and watch them work.
+A pixel kitchen on your own machine that wraps Claude Code and the Cursor CLI. Each agent is a cook at a station: you click them, type, and watch them work.
 
-![The office with an agent running a tool and the chat panel open](screenshots/hd/02-working-chat-tool-chip-hd.png)
+![The kitchen with cooks at their stations](screenshots/hd/kitchen-01-idle.png)
 
 ## Setup
 
 You need Node 18 or newer, plus Claude Code (`claude`) and/or the Cursor CLI (`cursor-agent` or `agent`), installed and logged in.
 
 ```bash
-git clone https://github.com/AndriSatria/mai-office
-cd mai-office
+git clone https://github.com/AndriSatria/mai-restaurant
+cd mai-restaurant
 npm install
 npm run start:claude   # Claude Code as the default agent type
 # or
@@ -19,26 +19,26 @@ npm start              # picks claude, then cursor, then mock, whichever it find
 
 Open http://127.0.0.1:3000 and click **＋ Hire agent**. Pick the agent type and the project folder it should work in.
 
-No CLI installed? `npm run start:mock` runs simulated agents with fake data so you can try the office first.
+No CLI installed? `npm run start:mock` runs simulated agents with fake data so you can try the kitchen first.
 
 ## What it does with your Claude / Cursor actions
 
-Every message you send runs the real CLI in print mode (`claude -p` or `agent -p`) in that agent's folder, and the office draws what the CLI reports.
+Every message you send runs the real CLI in print mode (`claude -p` or `agent -p`) in that agent's folder, and the kitchen draws what the CLI reports.
 
-| You do / the CLI does | You see in the office |
+| You do / the CLI does | You see in the kitchen |
 | --- | --- |
-| Send a prompt | The person starts thinking. The chat shows `> your prompt`, like the terminal. |
-| Read, edit, write, run Bash | The person types and their monitor flickers, with the tool name over their head. The chat gets `● Read(file)` lines with results, edit diffs and todo lists. |
-| Reply | Markdown in the chat and a speech bubble over the person. A `Done in … · N turns · $…` line closes the run. |
-| Subagents and background agents (e.g. `/code-review`) | Idle colleagues take the jobs and work at their own desks. Papers and envelopes fly between the desks, and the lead waits until all of them report. |
-| Plan mode | The team walks to the round table. When the plan is ready they cheer and go back. |
+| Send a prompt | The cook starts thinking. The chat shows `> your prompt`, like the terminal. |
+| Read, edit, write, run Bash | The cook chops or stirs, steam rises from the stove, and the tool name floats over their head. The chat gets `● Read(file)` lines with results, edit diffs and todo lists. |
+| Reply | Markdown in the chat and a speech bubble over the cook. A `Done in … · N turns · $…` line closes the run. |
+| Subagents and background agents (e.g. `/code-review`) | Idle colleagues take the jobs and work at their own stations. Papers and envelopes fly between the stations, and the lead waits until all of them report. |
+| Plan mode | The team walks to the pass. When the plan is ready they cheer and go back. |
 | Slash commands | Type `/` to pick from your own commands and skills (`~/.claude/commands`, skills, plugins, project folders). The text goes to the CLI unchanged. |
 | Permission modes | Shift+Tab in the message box cycles modes, like the CLI: default, accept edits and plan for Claude; default, plan and ask for Cursor. |
-| Resume a session | **Sessions** lists your local Claude Code sessions and Cursor CLI chats by project. **Resume in office** seats one at a desk with its history. |
+| Resume a session | **Sessions** lists your local Claude Code sessions and Cursor CLI chats by project. **Resume in kitchen** seats one at a station with its history. |
 | Stop | Esc in the message box or **■ Stop** ends the run. |
-| Nothing to do | Idle people stretch, read, get coffee or chat at the coffee machine. |
+| Nothing to do | Idle cooks stretch, read, get a coffee or chat by the walk-in fridge. |
 
-The first person you hire sits at the manager desk. Up to 7 people fit in the office.
+The first person you hire stands at the pass as head chef (tall toque). Up to 7 people fit in the kitchen: 6 cook stations and the pass.
 
 ### Not supported
 
