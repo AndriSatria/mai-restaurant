@@ -163,6 +163,21 @@ async function plan() {
   const pmi = args.indexOf('--permission-mode'), pmode = pmi >= 0 ? args[pmi + 1] : undefined;
   out({ type: 'system', subtype: 'init', session_id: sid, cwd: process.cwd(), tools: ['Bash', 'Read'], permissionMode: pmode || 'default',
     slash_commands: ['compact', 'cost', 'clear', 'model', 'security-review', 'frontend:component'], skills: ['pdf'] });
+  const hold = /^\s*browse\b/i.test(prompt) ? ['Read', { file_path: 'recipes/stock.md' }]
+    : /^\s*chop\b/i.test(prompt) ? ['Edit', { file_path: 'src/garnish.js', old_string: 'salt', new_string: 'salt and pepper' }]
+    : /^\s*stir\b/i.test(prompt) ? ['Bash', { command: 'npm test --silent' }]
+    : /^\s*(ship|deploy)\b/i.test(prompt) ? ['Bash', { command: 'git push origin main' }]
+    : null;
+  if (hold) {
+    const ms = Math.max(4000, +process.env.MOCK_HOLD_MS || 18000);
+    out({ type: 'assistant', session_id: sid, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'h1', name: hold[0], input: hold[1] }] } });
+    await wait(ms);
+    out({ type: 'user', session_id: sid, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'h1', content: 'ok' }] } });
+    const text = '(fake claude) held ' + hold[0] + '.';
+    out({ type: 'assistant', session_id: sid, message: { role: 'assistant', content: [{ type: 'text', text }] } });
+    out({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: sid });
+    return;
+  }
   if (pmode === 'plan') { await plan(); return; }
   if (/code-review/i.test(prompt) && /foreground/i.test(prompt)) { await codeReview(); return; }
   if (/code-review/i.test(prompt)) { await codeReviewBg(); return; }

@@ -51,6 +51,9 @@
     coffee: [{ x: 10.5, y: 1.5, face: 1 }],
     chat: [{ x: 9.5, y: 3.5, face: 0 }, { x: 10.5, y: 3.5, face: 2 }],
     door: { x: 0.5, y: 4.7, face: 0 },
+    // a couple of places at the fridge / shelf and at the pass, so cooks on the same trip don't stack
+    pantry: [{ x: 11.5, y: 1.5, face: 3 }, { x: 10.5, y: 2.5, face: 3 }, { x: 11.5, y: 3.5, face: 3 }],
+    bell: [{ x: 6.5, y: 1.5, face: 3 }, { x: 6.5, y: 2.5, face: 3 }],
   };
 
   // blocked[y][x]: furniture the pathfinder must avoid
@@ -586,7 +589,7 @@
     else if (face === 3) {                                             // the head chef: back to us, hands forward on the pass
       N = [5, -4]; Fh = [9, -4.5];
       if (st === 'working') {
-        const f = Math.floor(t * 8 + ph * 3), ring = Math.floor(t * 0.7 + ph) % 6 === 0;
+        const f = Math.floor(t * 8 + ph * 3), ring = ag.cook === 'bell' ? Math.floor(t * 3 + ph) % 3 === 0 : Math.floor(t * 0.7 + ph) % 6 === 0;
         N = ring ? [-8, -10] : [5 - (f % 3 === 0 ? 1 : 0), -4 - (f % 2)];
         Fh = [9 + (f % 3 === 1 ? 1 : 0), -4.5 - ((f + 1) % 2)];
       }
@@ -594,8 +597,9 @@
     }
     else if (face !== 0) { N = [-3, -1]; Fh = [5, -1]; }
     else if (st === 'working' && face === 0) {
-      const a = t * 9 + ph * 4, chop = Math.abs(Math.sin(t * 10 + ph * 3));
-      N = [6, 1 - chop * 5]; Fh = [10 + Math.cos(a), -1 + Math.sin(a)];
+      const a = t * 9 + ph * 4;
+      if (ag.cook === 'stove') { N = [7, -1]; Fh = [11 + Math.cos(a) * 2, -2 + Math.sin(a) * 2]; }   // stirring at their own stove
+      else { const chop = Math.abs(Math.sin(t * 10 + ph * 3)); N = [6, 1 - chop * 5]; Fh = [10 + Math.cos(a), -1 + Math.sin(a)]; }
     } else if (st === 'thinking') Fh = [3, -12 + by];
     else if (st === 'done') { const b = Math.floor(Math.abs(Math.sin(t * 6)) * 3); N = [-9, -27 - b]; Fh = [9, -27 - b]; }
     else if (st === 'error') { const j = Math.floor(t * 8) % 2; N = [-6 - j, -21]; Fh = [6 + j, -21]; }
@@ -642,6 +646,8 @@
     const sw = walking ? (fr === 1 ? 1 : fr === 3 ? -1 : 0) : 0;
     let N = [-5, -9 + sw * 2], Fh = [5, -9 - sw * 2];
     if (ag.mode === 'drink') { const sip = Math.floor(t * 1.5) % 2; Fh = [4, -17 - (sip ? 3 : 0)]; N = [-5, -9]; ret.mug = [Fh[0], Fh[1] - 6]; }
+    else if (ag.mode === 'pantry' && !walking) { const reach = Math.abs(Math.sin(t * 2.2 + ag.phase * 4)); N = [-3, -22 - reach * 5]; Fh = [6, -16 - (1 - reach) * 3]; }
+    else if (ag.mode === 'bell' && !walking) { const ding = Math.floor(t * 3 + ag.phase) % 4 === 0; N = [-5, -9]; Fh = ding ? [8, -22] : [6, -14]; }
     else if (ag.mode === 'chat') { if (ag.talk != null) { const g = Math.floor(t * 4) % 2; Fh = [ag.talkDir > 0 ? 8 : 6, -19 - g * 3]; } N = [-5, -9]; }
     else if (pose === 'cheer') { N = [-9, -32 - hop]; Fh = [9, -32 - hop]; }
     else if (pose === 'worry') { const j = Math.floor(t * 8) % 2; N = [-6, -10 - j]; Fh = [6, -10 + j]; }
@@ -1021,7 +1027,7 @@
       // tool chip floats just above the head (over the monitor it would cover the face)
       if (!e.away && e.huddle != null) pillText(ctx, 'team wrap-up', p.ax * S, (p.head - 5) * S, U * 0.9, '#2a1f00', '#f5c542', true);
       else if (!e.away && e.waiting > 0) pillText(ctx, 'waiting on ' + e.waiting + ' helper' + (e.waiting > 1 ? 's' : '') + '.'.repeat(1 + Math.floor(t * 2) % 3), p.ax * S, (p.head - 5) * S, U * 0.9, '#2a1f00', '#f5c542', true);
-      else if ((!e.away || e.meet) && e.state === 'working') pillText(ctx, e.tool || 'cooking…', p.ax * S, (p.head - 5) * S, U * 0.9, '#0e1f1a', '#5ff2a5', true);
+      else if ((!e.away || e.meet || e.dest === 'pantry' || e.dest === 'bell') && e.state === 'working') pillText(ctx, e.tool || 'cooking…', p.ax * S, (p.head - 5) * S, U * 0.9, '#0e1f1a', '#5ff2a5', true);
       if (e.help && !e.away && e.help.desk) {       // "helping <lead>" tag under the name pill
         pillText(ctx, 'helping ' + e.help.parentName + ' · ' + e.help.role, labX * S, (lp[1] + 11) * S, U * 0.72, '#14151f', roleCol(e.help.role), true);
       }

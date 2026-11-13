@@ -489,7 +489,7 @@
   }
 
   // Standing spots near the coffee machine: one sipper, or two chatters side by side.
-  const SPOTS = { coffee: [{ x: COFFEE.x, y: COFFEE.y }], chat: [{ x: 336, y: 108 }, { x: 362, y: 108 }] };
+  const SPOTS = { coffee: [{ x: COFFEE.x, y: COFFEE.y }], chat: [{ x: 336, y: 108 }, { x: 362, y: 108 }], pantry: [{ x: 330, y: 100 }, { x: 350, y: 100 }, { x: 370, y: 100 }], bell: [{ x: 320, y: 170 }, { x: 380, y: 170 }], door: { x: 24, y: 140, face: 0 } };
   /** Path from a desk to a spot: out the side gap, along the aisle, then up to the spot. */
   function walkPath(slot, spot) {
     const s = SLOTS[slot], ay = AISLE[s.row];

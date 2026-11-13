@@ -22,6 +22,20 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   out({ type: 'system', subtype: 'init', apiKeySource: 'login', cwd: process.cwd(), model: 'Fake Model', permissionMode: 'default' });
   out({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: prompt }] } });
   await wait(700);
+  const hold = /^\s*browse\b/i.test(prompt) ? { readToolCall: { args: { path: 'recipes/stock.md' } } }
+    : /^\s*chop\b/i.test(prompt) ? { editToolCall: { args: { path: 'src/garnish.js' } } }
+    : /^\s*stir\b/i.test(prompt) ? { shellToolCall: { args: { command: 'npm test --silent' } } }
+    : /^\s*(ship|deploy)\b/i.test(prompt) ? { shellToolCall: { args: { command: 'git push origin main' } } }
+    : null;
+  if (hold) {
+    const ms = Math.max(4000, +process.env.MOCK_HOLD_MS || 18000);
+    out({ type: 'tool_call', subtype: 'started', call_id: 'h1', tool_call: hold });
+    await wait(ms);
+    const k = Object.keys(hold)[0];
+    out({ type: 'tool_call', subtype: 'completed', call_id: 'h1', tool_call: { [k]: { args: hold[k].args, result: { success: {} } } } });
+    out({ type: 'result', subtype: 'success', is_error: false, result: '(fake cursor) held tool', session_id: sid });
+    return;
+  }
   if (/parallel|team/i.test(prompt)) { // best-effort guess of how Cursor reports task/subagent tool calls
     out({ type: 'tool_call', subtype: 'started', call_id: 't1', tool_call: { taskToolCall: { args: { description: 'explore repo', subagentType: 'explore' } } } });
     out({ type: 'tool_call', subtype: 'started', call_id: 't2', tool_call: { taskToolCall: { args: { description: 'run tests', subagentType: 'shell' } } } });

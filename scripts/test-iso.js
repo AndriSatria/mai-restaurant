@@ -78,7 +78,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const p = await page.evaluate(() => {
       const O = window.Office, bad = [], samples = [];
       let n = 0, axis = true;
-      for (const s of O.SLOTS) for (const spot of [...O.SPOTS.coffee, ...O.SPOTS.chat]) {
+      for (const s of O.SLOTS) for (const spot of [...O.SPOTS.coffee, ...O.SPOTS.chat, ...O.SPOTS.pantry, ...O.SPOTS.bell]) {
         const pts = O.walkPath(s.i, spot); n++;
         for (let i = 1; i < pts.length; i++) {
           const first = i === 1; // the first leg starts in the chair, which is furniture by definition
@@ -107,7 +107,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
       }
       return { n, slots: O.SLOTS.length, bad: bad.slice(0, 5), axis, own, other, miss: (window.__miss || []).slice(0, 12) };
     });
-    assert(p.n === p.slots * 3 && p.bad.length === 0, `${p.n} paths (${p.slots} desks x coffee/chat spots) never touch blocked tiles ${p.bad.length ? JSON.stringify(p.bad) : ''}`);
+    assert(p.n === p.slots * 8 && p.bad.length === 0, `${p.n} paths (${p.slots} desks x coffee/chat/pantry/bell spots) never touch blocked tiles ${p.bad.length ? JSON.stringify(p.bad) : ''}`);
     if (p.miss.length) console.log('  misses:', JSON.stringify(p.miss));
     assert(p.axis, 'path segments follow the tile grid (axis aligned)');
     assert(p.own / (p.own + p.other) > 0.97, `walker torso is the front-most hit along paths (${p.own}/${p.own + p.other})`);
@@ -220,7 +220,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(inf.team.filter((e) => e.kind === 'peer').every((e) => e.inferred) && inf.team.some((e) => e.kind === 'peer') && inf.tags.length >= 1, 'peer entries are flagged inferred and tagged "inferred" in the feed');
     assert(inf.team.some((e) => e.kind === 'handoff' && e.ok === false) && inf.team.some((e) => e.kind === 'huddle'), 'one failing helper is reported in the handoffs; huddle entry exists');
     await page.waitForFunction((id) => window.harness.states().find((a) => a.id === id).state === 'done' || window.harness.states().find((a) => a.id === id).state === 'idle', adaId, { timeout: 60000 });
-    await page.waitForFunction(() => window.harness.states().every((a) => !a.helping && a.home) && window.harness.flights().length === 0, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.harness.states().every((a) => !a.helping && (a.home || a.dest === 'pantry' || a.dest === 'bell')) && window.harness.flights().length === 0, null, { timeout: 30000 });
     assert(true, 'everybody is released from helper state at their own desk, flights cleaned up');
     const post = await page.evaluate((ids) => ({ sys: ids.map((id) => window.harness.agents.get(id).transcript.some((m) => m.role === 'system' && /^helped Ada: /.test(m.text))),
       ran: window.harness.agents.get(ids[0]).transcript.some((m) => m.role === 'user' && m.text === 'when you are free: ping me'), sub: document.querySelectorAll('#transcript details.msg.sub.finished, #transcript details.msg.sub.failed').length }), hid);
@@ -263,7 +263,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const lstate = pl.st.find((a) => a.name === 'Linus');
     assert(pl.p.seated.includes(ids0.Grace) && pl.p.owner === ids0.Grace, 'the plan owner sits at the round table');
     assert(pl.p.seated.length >= want, `idle colleagues gathered at the table (${pl.p.seated.length} seated of ${total} people, Linus busy)`);
-    assert(!linusSeated && (lstate.home || lstate.state === 'done' || lstate.state === 'idle') && !pl.p.seated.includes(ids0.Linus), 'a working colleague stays at his desk');
+    assert(!linusSeated && !pl.p.seated.includes(ids0.Linus), 'a working colleague stays off the planning table');
     assert(!sawDrink && !sawChat, 'no coffee / chat walks while the team is gathered');
     const seatSet = new Set(await page.evaluate(() => window.harness.states().filter((a) => a.meet).map((a) => a.slot)));
     assert(seatSet.size === pl.p.seated.length, 'every person at the table is in a different chair');
@@ -283,6 +283,55 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const sw = await page.evaluate((ids) => ({ g: window.harness.states().find((a) => a.id === ids.Grace), a: window.harness.states().find((a) => a.id === ids.Ada) }), ids0);
     assert(sw.g.main && sw.g.slot === MGR && !sw.a.main && sw.a.slot === gs && sw.g.home && sw.a.home, `Make main: Grace -> manager desk, Ada -> desk ${gs}`);
     assert(await page.evaluate(() => document.getElementById('mainBtn').hidden && !document.getElementById('mainBadge').hidden), 'the main agent shows the ★ main badge instead of the button');
+
+    // ---- tool use becomes a kitchen trip ----
+    const tm = await page.evaluate(() => {
+      const T = window.harness.toolTrip;
+      return {
+        read: T('Read'), grep: T('Grep'), glob: T('Glob'), web: T('WebFetch'), search: T('WebSearch'),
+        edit: T('Edit'), write: T('Write'), multi: T('MultiEdit'), nb: T('NotebookEdit'),
+        bash: T('Bash', 'npm test'), shell: T('Shell', 'ls'),
+        push: T('Bash', 'git push origin main'), deploy: T('Bash', 'wrangler deploy'),
+        unk: T('TodoWrite'), empty: T(null),
+      };
+    });
+    assert(tm.read === 'pantry' && tm.grep === 'pantry' && tm.glob === 'pantry' && tm.web === 'pantry' && tm.search === 'pantry', 'Read/Grep/Glob/search/web fetch map to the pantry');
+    assert(tm.edit === 'chop' && tm.write === 'chop' && tm.multi === 'chop' && tm.nb === 'chop', 'Edit/Write map to chopping at the station');
+    assert(tm.bash === 'stove' && tm.shell === 'stove', 'Bash/Shell map to the stove');
+    assert(tm.push === 'bell' && tm.deploy === 'bell', 'a git push or deploy rings the bell at the pass');
+    assert(tm.unk === null && tm.empty === null, 'unknown tools stay at the station');
+
+    await page.evaluate(() => {
+      window.harness.select(null);
+      for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id });
+    });
+    await sleep(400);
+    const tripIds = await page.evaluate(() => {
+      const by = (n) => [...window.harness.agents.values()].find((a) => a.name === n);
+      const people = ['Linus', 'Alan', 'Ada'].map(by).filter(Boolean);
+      window.harness.send({ type: 'send', id: people[0].id, text: 'browse the stock list' });
+      window.harness.send({ type: 'send', id: people[1].id, text: 'chop the garnish' });
+      window.harness.send({ type: 'send', id: people[2].id, text: 'stir the reduction' });
+      return people.map((a) => ({ id: a.id, name: a.name }));
+    });
+    await page.waitForFunction((ids) => {
+      const st = window.harness.states();
+      const by = (id) => st.find((s) => s.id === id);
+      const a = by(ids[0].id), b = by(ids[1].id), c = by(ids[2].id);
+      return a && (a.dest === 'pantry' || a.mode === 'pantry') && b && b.cook === 'chop' && b.seated && c && c.cook === 'stove' && c.seated;
+    }, tripIds, { timeout: 20000 });
+    const trips = await page.evaluate((ids) => {
+      const st = window.harness.states();
+      const by = (id) => st.find((s) => s.id === id);
+      const a = by(ids[0].id), b = by(ids[1].id), c = by(ids[2].id);
+      const pantry = st.filter((s) => s.dest === 'pantry' || s.mode === 'pantry');
+      const pos = pantry.map((s) => (s.x && s.y ? s.x.toFixed(2) + ',' + s.y.toFixed(2) : s.dest));
+      return { a: { dest: a.dest, mode: a.mode, tool: a.tool, seated: a.seated }, b: { cook: b.cook, seated: b.seated, tool: b.tool }, c: { cook: c.cook, seated: c.seated, tool: c.tool }, pos, uniq: new Set(pos).size };
+    }, tripIds);
+    assert(trips.a.dest === 'pantry' || trips.a.mode === 'pantry', 'browse (Read) walks to the pantry: ' + JSON.stringify(trips.a));
+    assert(trips.b.cook === 'chop' && trips.b.seated, 'chop (Edit) stays at the station chopping: ' + JSON.stringify(trips.b));
+    assert(trips.c.cook === 'stove' && trips.c.seated, 'stir (Bash) stays at the stove: ' + JSON.stringify(trips.c));
+    assert(trips.uniq === trips.pos.length, 'cooks at the pantry take different spots: ' + JSON.stringify(trips.pos));
 
     // ---- chat panel: Claude Code style formatting stays safe (model text is never parsed as HTML) ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);

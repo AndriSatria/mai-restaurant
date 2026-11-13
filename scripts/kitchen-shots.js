@@ -3,6 +3,7 @@
 //   kitchen-01-idle.png      cooks idle (stretch / read / look / coffee)
 //   kitchen-02-working.png   several cooks busy, including a /code-review with helpers
 //   kitchen-03-headchef.png  close-up of the pass (head chef)
+//   kitchen-04-trips.png     cooks at pantry, station (chop) and stove at once
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -96,6 +97,29 @@ const FAKE = makeFakeClaudeDir();
     console.log('headchef clip', clip);
     await page.screenshot({ path: path.join(OUT, 'kitchen-03-headchef.png'), clip });
     console.log('saved kitchen-03-headchef.png');
+
+    // 04: cooks at the pantry (Read), at their station chopping (Edit), and at the stove stirring (Bash)
+    await page.evaluate(() => {
+      window.harness.select(null);
+      for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id });
+    });
+    await idle(20000).catch(() => {});
+    await page.evaluate(() => window.harness.select(null));
+    await sendTo('Ken', 'browse the stock list');
+    await sendTo('Linus', 'browse the pantry shelf');
+    await sendTo('Grace', 'chop the garnish');
+    await sendTo('Alan', 'stir the reduction');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => {
+      const st = window.harness.states();
+      const pantry = st.filter((a) => a.mode === 'pantry');
+      const spots = new Set(pantry.map((a) => (a.x || 0).toFixed(1) + ',' + (a.y || 0).toFixed(1)));
+      const chop = st.some((a) => a.cook === 'chop' && a.seated);
+      const stove = st.some((a) => a.cook === 'stove' && a.seated);
+      return pantry.length >= 1 && spots.size === pantry.length && chop && stove;
+    }, null, { timeout: 25000 });
+    await sleep(800);
+    await shot('kitchen-04-trips.png');
   } finally {
     await browser.close(); srv.kill();
   }
