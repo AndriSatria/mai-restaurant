@@ -46,7 +46,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
       // the same pixel with the walker standing far behind the desk must hit the desk instead
       const back = { id: 'w', slot: M - 1, away: true, x: s1.dx - 0.5 - 1, y: 5.5, face: 0 };
       out.behind = O.hitTest(fx, fy, all.slice(0, M - 1).concat([back, all[M]]));
-      // chair hits belong to that slot's agent
+      // a cook standing at their station is hittable at the standing mark
       const [cx, cy] = O.project(s1.dx - 0.5, s1.dy + 1.0, 4); out.chair = O.hitTest(cx, cy, all);
       out.n = N; return out;
     });
@@ -55,13 +55,17 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(r.seated.every(Boolean), `seated agents + their desks resolve to the right agent (${r.seated.filter(Boolean).length}/${r.n}, manager desk included)`);
     assert(r.front && r.front.id === 'w', 'a walker in front of a desk is picked before the desk (front-most first)');
     assert(r.behind && r.behind.id === 'a1', 'the desk is picked when the walker is behind it');
-    assert(r.chair && r.chair.id === 'a1', 'chair hit resolves to the seated agent');
+    assert(r.chair && r.chair.id === 'a1', 'a cook standing at their station is hittable');
 
-    // ---- furniture footprints never overlap (manager desk, cafe counter, desks + chairs, round table + stools, plants) ----
+    // ---- furniture footprints never overlap (pass, cafe counter, joined counter runs, standing pads, planning table, plants) ----
     const ov = await page.evaluate(() => {
       const O = window.Office, T = O.TABLE, R = 2.0, fp = [];
-      for (const s of O.SLOTS) if (!s.mgr) fp.push(['desk' + s.i, s.dx - 1, s.dy, s.dx + 1, s.dy + 2]);
-      fp.push(['manager desk', O.MD.x0, O.MD.y0, O.MD.x1, O.MD.y1], ['manager chair', O.SLOTS[O.MGR].seat.x - 0.45, 1.1, O.SLOTS[O.MGR].seat.x + 0.45, 1.95]);
+      for (const s of O.SLOTS) if (!s.mgr) {
+        fp.push(['desk' + s.i, s.dx, s.dy, s.dx + 1, s.dy + 2]);
+        fp.push(['stand' + s.i, s.dx - 1, s.dy, s.dx, s.dy + 2]);
+      }
+      for (const dx of [2, 5]) { fp.push(['join' + dx + 'a', dx, 3, dx + 1, 4]); fp.push(['join' + dx + 'b', dx, 6, dx + 1, 7]); }
+      fp.push(['manager desk', O.MD.x0, O.MD.y0, O.MD.x1, O.MD.y1], ['manager stand', O.SLOTS[O.MGR].seat.x - 0.45, 1.1, O.SLOTS[O.MGR].seat.x + 0.45, 1.95]);
       fp.push(['cafe counter', O.COUNTER.x0, O.COUNTER.y0, O.COUNTER.x1, O.COUNTER.y1], ['round table', T.x - R, T.y - R, T.x + R, T.y + R]);
       for (const p of O.PLANTS) fp.push(['plant', p.x + 0.1, p.y + 0.1, p.x + 0.9, p.y + 0.9]);
       const hits = [];
@@ -78,13 +82,16 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const p = await page.evaluate(() => {
       const O = window.Office, bad = [], samples = [];
       let n = 0, axis = true;
-      for (const s of O.SLOTS) for (const spot of [...O.SPOTS.coffee, ...O.SPOTS.chat, ...O.SPOTS.pantry, ...O.SPOTS.bell]) {
+      const spots = [...O.SPOTS.coffee, ...O.SPOTS.chat, ...O.SPOTS.pantry, ...O.SPOTS.bell, ...(O.SPOTS.heat || [])];
+      for (const s of O.SLOTS) for (const spot of spots) {
         const pts = O.walkPath(s.i, spot); n++;
+        const startTiles = new Set(s.start.map(([x, y]) => x + ',' + y));
+        startTiles.add(Math.floor(s.seat.x) + ',' + Math.floor(s.seat.y));
         for (let i = 1; i < pts.length; i++) {
-          const first = i === 1; // the first leg starts in the chair, which is furniture by definition
           const a = pts[i - 1], b = pts[i];
-          if (a.x !== b.x && a.y !== b.y) axis = false;
-          if (first) continue;
+          const leaving = startTiles.has(Math.floor(a.x) + ',' + Math.floor(a.y));
+          if (a.x !== b.x && a.y !== b.y && !leaving) axis = false;
+          if (leaving) continue; // leaving the standing post, which is furniture by definition
           const len = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)), N = Math.ceil(len * 8);
           for (let k = 0; k <= N; k++) {
             const x = a.x + ((b.x - a.x) * k) / N, y = a.y + ((b.y - a.y) * k) / N;
@@ -103,11 +110,18 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
       for (const [x, y] of samples) {
         const [px, py] = O.project(x, y, 16);
         const h = O.hitTest(px, py, all.concat([{ id: 'w', slot: O.MGR - 1, away: true, x, y, face: 0 }]));
-        if (h && h.id === "w") own++; else { other++; (window.__miss = window.__miss || []).push([x.toFixed(2), y.toFixed(2), JSON.stringify(h)]); }
+        if (h && h.id === "w") own++;
+        else {
+          const si = h && String(h.id || "").startsWith("a") ? +String(h.id).slice(1) : NaN;
+          const seat = Number.isInteger(si) ? O.SLOTS[si].seat : null;
+          // a cook genuinely in front of the walker (higher x+y in iso) may cover the torso pixel
+          if (seat && seat.x + seat.y > x + y) own++;
+          else { other++; (window.__miss = window.__miss || []).push([x.toFixed(2), y.toFixed(2), JSON.stringify(h)]); }
+        }
       }
       return { n, slots: O.SLOTS.length, bad: bad.slice(0, 5), axis, own, other, miss: (window.__miss || []).slice(0, 12) };
     });
-    assert(p.n === p.slots * 8 && p.bad.length === 0, `${p.n} paths (${p.slots} desks x coffee/chat/pantry/bell spots) never touch blocked tiles ${p.bad.length ? JSON.stringify(p.bad) : ''}`);
+    assert(p.n === p.slots * 11 && p.bad.length === 0, `${p.n} paths (${p.slots} desks x coffee/chat/pantry/bell/heat spots) never touch blocked tiles ${p.bad.length ? JSON.stringify(p.bad) : ''}`);
     if (p.miss.length) console.log('  misses:', JSON.stringify(p.miss));
     assert(p.axis, 'path segments follow the tile grid (axis aligned)');
     assert(p.own / (p.own + p.other) > 0.97, `walker torso is the front-most hit along paths (${p.own}/${p.own + p.other})`);
@@ -128,7 +142,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const lin = await page.evaluate(() => { const a = [...window.harness.agents.values()].find((x) => x.name === 'Linus'); return { slot: a.slot, main: a.main }; });
     assert(lin.slot === 0 && !lin.main, 'the next hire takes a regular desk (slot 0), not the manager desk');
     await sleep(500);
-    // the manager at the desk resolves from head, desk and chair-back hits
+    // the manager at the pass resolves from head and desk hits
     const mh = await page.evaluate(() => {
       const O = window.Office, mgr = { id: 'm', slot: O.MGR, away: false, x: 0, y: 0, main: true }, out = {};
       const [hx, hy] = O.project(O.SLOTS[O.MGR].seat.x, O.SLOTS[O.MGR].seat.y, 8 + 14), [dx, dy] = O.deskPoint(O.MGR);
@@ -189,7 +203,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
         tip: H.tooltip(helpers[0].id), names: helpers.map((a) => a.name), hired: ppl.filter((a) => a.transcript.some((m) => /Hired automatically/.test(m.text))).map((a) => a.name) };
     }, adaId);
     assert(live.n === 4 && live.tiles === 4 && live.notAda, `/code-review: 4 people (not the lead), each from a different desk (${live.names.join(',')})`);
-    assert(live.seated, 'all 4 helpers are SEATED at their own desks while working (nobody standing around the lead)');
+    assert(live.seated, 'all 4 helpers stay at their own stations while working (nobody crowding the lead)');
     assert(JSON.stringify(live.roles) === JSON.stringify(['performance', 'security', 'style', 'tests']), `helpers carry the 4 derived roles (${live.roles.join(',')})`);
     assert(live.people === live.n0 + 1 && live.hired.length === 1, `office had 3 idle colleagues, so exactly 1 new regular agent was auto-hired (${live.hired.join(',')})`);
     const fp = live.first[live.hired[0]];
@@ -220,7 +234,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(inf.team.filter((e) => e.kind === 'peer').every((e) => e.inferred) && inf.team.some((e) => e.kind === 'peer') && inf.tags.length >= 1, 'peer entries are flagged inferred and tagged "inferred" in the feed');
     assert(inf.team.some((e) => e.kind === 'handoff' && e.ok === false) && inf.team.some((e) => e.kind === 'huddle'), 'one failing helper is reported in the handoffs; huddle entry exists');
     await page.waitForFunction((id) => window.harness.states().find((a) => a.id === id).state === 'done' || window.harness.states().find((a) => a.id === id).state === 'idle', adaId, { timeout: 60000 });
-    await page.waitForFunction(() => window.harness.states().every((a) => !a.helping && (a.home || a.dest === 'pantry' || a.dest === 'bell')) && window.harness.flights().length === 0, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.harness.states().every((a) => !a.helping && (a.home || a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat')) && window.harness.flights().length === 0, null, { timeout: 30000 });
     assert(true, 'everybody is released from helper state at their own desk, flights cleaned up');
     const post = await page.evaluate((ids) => ({ sys: ids.map((id) => window.harness.agents.get(id).transcript.some((m) => m.role === 'system' && /^helped Ada: /.test(m.text))),
       ran: window.harness.agents.get(ids[0]).transcript.some((m) => m.role === 'user' && m.text === 'when you are free: ping me'), sub: document.querySelectorAll('#transcript details.msg.sub.finished, #transcript details.msg.sub.failed').length }), hid);
@@ -241,7 +255,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     // ---- plan mode: the plan owner walks to the round table, idle colleagues join, busy ones stay, then everybody walks home ----
     await page.waitForFunction(() => window.harness.states().every((a) => a.home && !a.helping && a.state !== 'working' && a.state !== 'thinking'), null, { timeout: 40000 });
     const geo = await page.evaluate(() => { const O = window.Office; return { seats: O.SEATS.length, tb: O.tablePoint ? 1 : 0 }; });
-    assert(geo.seats >= 6 && geo.seats <= 8, `round table has ${geo.seats} chairs`);
+    assert(geo.seats >= 6 && geo.seats <= 8, `planning table has ${geo.seats} standing places`);
     const ids0 = await page.evaluate(() => Object.fromEntries([...window.harness.agents.values()].map((a) => [a.name, a.id])));
     const total = Object.keys(ids0).length;
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);
@@ -261,19 +275,19 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
       await sleep(100);
     }
     const lstate = pl.st.find((a) => a.name === 'Linus');
-    assert(pl.p.seated.includes(ids0.Grace) && pl.p.owner === ids0.Grace, 'the plan owner sits at the round table');
+    assert(pl.p.seated.includes(ids0.Grace) && pl.p.owner === ids0.Grace, 'the plan owner stands at the planning table');
     assert(pl.p.seated.length >= want, `idle colleagues gathered at the table (${pl.p.seated.length} seated of ${total} people, Linus busy)`);
     assert(!linusSeated && !pl.p.seated.includes(ids0.Linus), 'a working colleague stays off the planning table');
     assert(!sawDrink && !sawChat, 'no coffee / chat walks while the team is gathered');
     const seatSet = new Set(await page.evaluate(() => window.harness.states().filter((a) => a.meet).map((a) => a.slot)));
-    assert(seatSet.size === pl.p.seated.length, 'every person at the table is in a different chair');
+    assert(seatSet.size === pl.p.seated.length, 'every person at the table is in a different standing place');
     await page.waitForFunction(() => window.harness.plan().state === 'ready', null, { timeout: 40000 });
     const rdy = await page.evaluate(() => window.harness.plan());
     assert(rdy.summary && rdy.summary.length > 10 && rdy.seated.length >= want - 1, 'plan ready: summary shown over the table, the team is still seated: ' + rdy.summary);
     await page.waitForFunction(() => window.harness.plan().state === null && window.harness.states().every((a) => a.home), null, { timeout: 60000 });
     assert(true, 'after the plan is approved everybody walks back to their own desk');
     const back = await page.evaluate(() => window.harness.states().every((a) => a.home && a.seated));
-    assert(back, 'all people are seated at their desks again');
+    assert(back, 'all people are back at their stations');
 
     // ---- promote through the UI: swap desks with the current main ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);
@@ -332,6 +346,24 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(trips.b.cook === 'chop' && trips.b.seated, 'chop (Edit) stays at the station chopping: ' + JSON.stringify(trips.b));
     assert(trips.c.cook === 'stove' && trips.c.seated, 'stir (Bash) stays at the stove: ' + JSON.stringify(trips.c));
     assert(trips.uniq === trips.pos.length, 'cooks at the pantry take different spots: ' + JSON.stringify(trips.pos));
+
+    // Bash at a cold station (sink = slot 0, Linus) walks to a heat aisle
+    await page.evaluate(() => {
+      window.harness.select(null);
+      for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id });
+    });
+    await sleep(400);
+    const sinkId = await page.evaluate(() => [...window.harness.agents.values()].find((a) => a.name === 'Linus').id);
+    await page.evaluate((id) => window.harness.send({ type: 'send', id, text: 'stir the reduction' }), sinkId);
+    await page.waitForFunction((id) => {
+      const s = window.harness.states().find((a) => a.id === id);
+      return s && (s.dest === 'heat' || s.mode === 'heat') && s.cook === 'stove';
+    }, sinkId, { timeout: 20000 });
+    const heatTrip = await page.evaluate((id) => {
+      const s = window.harness.states().find((a) => a.id === id);
+      return { dest: s.dest, mode: s.mode, cook: s.cook, x: s.x, y: s.y, seated: s.seated };
+    }, sinkId);
+    assert(heatTrip.dest === 'heat' || heatTrip.mode === 'heat', 'Bash at a sink station walks to a heat aisle: ' + JSON.stringify(heatTrip));
 
     // ---- order tickets on the pass ----
     await page.evaluate(() => {

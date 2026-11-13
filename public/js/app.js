@@ -648,13 +648,13 @@
   const faceOf = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 0 : 2) : (dy > 0 ? 1 : 3)); // 0 SE 1 SW 2 NW 3 NE
   // ---------- plan mode: everybody who is free gathers at the round table ----------
   // The agent in plan mode (a.plan from the server) walks to the table; idle colleagues (not helping, nothing queued, not being chatted with) join
-  // and sit on the stools. Busy people stay at their desks. When the plan is done and the hold time is over, they all walk back.
+  // and gather at the planning table. Busy people stay at their stations. When the plan is done and the hold time is over, they all walk back.
   const planOwner = () => { for (const a of agents.values()) if (a.plan) return a; return null; };
   const meetingFor = (a) => a.meetSeat >= 0 && !!planOwner();
   const busy = (a) => a.state !== 'idle' && a.state !== 'done';
   const joinable = (a, o) => !a.away && a.mode === 'sit' && !a.act && !a.help && !a.pendingHelp && !a.helping && !a.queued && !busy(a) && a.id !== selectedId && a !== o;
   const wantsHome = (a) => {
-    if (a.away && (a.dest === 'pantry' || a.dest === 'bell')) return tripOf(a) !== a.dest || a.id === selectedId;
+    if (a.away && (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat')) return tripOf(a) !== (a.dest === 'heat' ? 'stove' : a.dest) || a.id === selectedId;
     if (a.away && a.dest === 'meet') { const o = planOwner(); return !meetingFor(a) || (a !== o && (busy(a) || !!a.help || !!a.helping || a.id === selectedId)); }
     return !!a.help || busy(a) || a.id === selectedId || !!planOwner();
   };
@@ -662,8 +662,9 @@
   const canStart = (a) => !a.away && !a.act && !a.help && !a.pendingHelp && !a.helping && a.state === 'idle' && a.id !== selectedId && !planOwner();
   const endAct = (a, now) => { a.act = null; a.nextAct = now + (WANDER_FAST ? rand(2000, 4000) : rand(8000, 22000)); };
 
-  // tool use becomes a kitchen trip: pantry (read/search), own station chopping (edit) or stirring (bash),
-  // the pass bell for a deploy / git push. Helpers on a team job stay at their own station.
+  // tool use becomes a kitchen trip: pantry (read/search), own station's set (edit), stove/heat (bash: stay if
+  // the station is already a heat set, otherwise walk to the nearest heat aisle), pass bell for a deploy / git push.
+  // Helpers on a team job stay at their own station.
   const DEPLOY_RE = /\b(git\s+push|deploy|kubectl\s+apply|terraform\s+apply|npm\s+publish|docker\s+push|wrangler\s+deploy|gh\s+release)\b/i;
   const TRIPS = [
     ['pantry', /^(Read|Grep|Glob|LS|Search|WebSearch|WebFetch|GlobTool)$/i],
@@ -695,9 +696,27 @@
     const base = spots[n % spots.length], ox = n % 2 ? 0.32 : -0.32, oy = 0.28 * (Math.floor(n / spots.length) + 1);
     return { x: base.x + ox, y: base.y + oy, face: base.face };
   }
+  function claimHeat(a) {
+    const spots = (Office.SPOTS && Office.SPOTS.heat) || [];
+    if (!spots.length) return null;
+    const seat = Office.SLOTS[a.slot] && Office.SLOTS[a.slot].seat;
+    const ordered = seat ? spots.slice().sort((p, q) => (Math.abs(p.x - seat.x) + Math.abs(p.y - seat.y)) - (Math.abs(q.x - seat.x) + Math.abs(q.y - seat.y))) : spots;
+    const taken = new Set();
+    for (const b of agents.values()) if (b !== a && b.away && b.dest === 'heat' && b.spot) taken.add(b.spot.x + ',' + b.spot.y);
+    for (const s of ordered) if (!taken.has(s.x + ',' + s.y)) return s;
+    return claimSpot('heat', a);
+  }
   function updateTrip(a) {
     const k = tripOf(a);
-    a.cook = (k === 'chop' || k === 'stove' || k === 'bell') ? k : null;
+    if (k === 'stove') {
+      a.cook = 'stove';
+      const set = Office.stationSet && Office.stationSet(a.slot);
+      if (set && Office.HEAT && Office.HEAT[set]) return;
+      const spot = claimHeat(a);
+      if (spot) startWalk(a, spot, 'heat');
+      return;
+    }
+    a.cook = (k === 'chop' || k === 'bell') ? k : null;
     if (k !== 'pantry' && k !== 'bell') return;
     if (k === 'bell' && a.slot === Office.MGR) return;
     const spot = claimSpot(k, a);
@@ -751,7 +770,7 @@
 
   function stepWalker(a, dt, now) {
     if (a.mode === 'meet') { if (wantsHome(a)) { if (!a.leaveAt) a.leaveAt = now + rand(0, 900) * TS; if (now >= a.leaveAt) { a.leaveAt = 0; leave(a); } } return; }
-    if (a.mode === 'pantry' || a.mode === 'bell') { if (wantsHome(a)) leave(a); return; }
+    if (a.mode === 'pantry' || a.mode === 'bell' || a.mode === 'heat') { if (wantsHome(a)) leave(a); return; }
     if (a.mode === 'drink') { if (now > a.drinkUntil || wantsHome(a)) leave(a); return; }
     if (a.mode === 'chat') {
       const p = agents.get(a.partner);
@@ -770,7 +789,7 @@
           if (a.spot && a.spot.face !== undefined) a.face = a.spot.face;
           if (a.dest === 'meet') { a.mode = 'meet'; a.meetSince = now; }
           else if (a.dest === 'drink') { a.mode = 'drink'; a.drinkUntil = now + (WANDER_FAST ? 4000 : rand(5000, 10000)) * TS; }
-          else if (a.dest === 'pantry' || a.dest === 'bell') { a.mode = a.dest; }
+          else if (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat') { a.mode = a.dest; }
           else { a.mode = 'chat'; a.waitSince = now; }
         } else a.target++;
       } else if (a.target === 0) { a.away = false; a.mode = 'sit'; a.partner = null; a.meetSeat = -1; a.dest = null; if (a.help && a.help.phase === 'go') arriveHelp(a, now); else endAct(a, now); }

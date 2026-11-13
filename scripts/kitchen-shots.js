@@ -3,8 +3,9 @@
 //   kitchen-01-idle.png      cooks idle (stretch / read / look / coffee)
 //   kitchen-02-working.png   several cooks busy, including a /code-review with helpers
 //   kitchen-03-headchef.png  close-up of the pass (head chef)
-//   kitchen-04-trips.png     cooks at pantry, station (chop) and stove at once
+//   kitchen-04-trips.png     cooks at pantry, own station and stove/heat at once
 //   kitchen-05-tickets.png   pass rail with pending, in-progress and done tickets
+//   kitchen-06-line.png      close view of the two joined counter runs and their six sets
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -42,7 +43,7 @@ const FAKE = makeFakeClaudeDir();
   try {
     await page.goto(`http://localhost:${PORT}/?wander=off`);
     await page.waitForSelector('#conn.on');
-    for (const [name, type] of [['Ada', 'mock'], ['Linus', 'cursor'], ['Grace', 'claude'], ['Ken', 'mock'], ['Alan', 'mock']]) {
+    for (const [name, type] of [['Ada', 'mock'], ['Linus', 'cursor'], ['Grace', 'claude'], ['Ken', 'mock'], ['Alan', 'mock'], ['Margaret', 'mock'], ['Barbara', 'mock']]) {
       await page.evaluate(([n, t, cwd]) => window.harness.send({ type: 'hire', name: n, cwd, agentType: t }), [name, type, ROOT]);
       await page.waitForFunction((n) => window.harness.states().some((a) => a.name === n), name);
       await sleep(150);
@@ -67,20 +68,44 @@ const FAKE = makeFakeClaudeDir();
     });
     await sleep(1600);
     await shot('kitchen-01-idle.png');
+
+    // 06: close view of the two joined runs (taken while all six sets are on the counters)
+    const lineClip = await page.evaluate(() => {
+      const O = window.Office, b = document.getElementById('office').getBoundingClientRect(), k = b.width / O.W;
+      const pts = [];
+      for (const [x, y, z] of [[1.0, 0.8, 36], [6.2, 0.8, 36], [1.0, 9.3, 0], [6.4, 9.3, 0], [2, 1, 20], [5, 8, 36], [5, 7, 36], [2, 7, 36]]) pts.push(O.project(x, y, z));
+      const left = Math.min(...pts.map((p) => p[0])) - 6, right = Math.max(...pts.map((p) => p[0])) + 8;
+      const top = Math.min(...pts.map((p) => p[1])) - 4, bot = Math.max(...pts.map((p) => p[1])) + 10;
+      return { x: b.x + left * k, y: b.y + top * k, width: (right - left) * k, height: (bot - top) * k };
+    });
+    console.log('line clip', lineClip);
+    await page.screenshot({ path: path.join(OUT, 'kitchen-06-line.png'), clip: lineClip });
+    console.log('saved kitchen-06-line.png');
+
     await page.waitForFunction(() => window.harness.states().every((a) => !a.away && !a.act), null, { timeout: 40000 });
 
-    // 02: several cooks busy, including a background /code-review with helpers
-    // First get Ada thinking/working, then Grace runs /code-review (fake claude, 4 background helpers)
-    await sendTo('Ada', 'Refactor src/utils.js and run the tests, then summarise.');
-    await waitState('Ada', 'working');
+    // 02: all six station sets active, including a /code-review with helpers at their own sets
     await sendTo('Grace', '/code-review');
-    await page.waitForFunction(() => { const H = window.harness, g = [...H.agents.values()].find((a) => a.name === 'Grace');
+    await page.waitForFunction(() => {
+      const H = window.harness;
       const helpers = [...H.agents.values()].filter((a) => { const h = H.help(a.id); return h && h.phase === 'work' && h.seated; });
-      return helpers.length >= 4; }, null, { timeout: 30000 });
+      return helpers.length >= 4;
+    }, null, { timeout: 40000 });
+    await page.evaluate(() => {
+      const H = window.harness;
+      const rest = [...H.agents.values()].filter((a) => a.slot < 6 && a.name !== 'Grace' && !H.help(a.id));
+      for (const a of rest) H.send({ type: 'send', id: a.id, text: 'chop the garnish' });
+    });
+    await page.waitForFunction(() => {
+      const line = window.harness.states().filter((a) => a.slot < 6);
+      return line.length === 6 && line.every((a) => a.seated && (a.helping === 'work' || a.state === 'working' || a.cook === 'chop'));
+    }, null, { timeout: 20000 });
     await page.evaluate(() => window.harness.select(null));
-    await sleep(700);
+    await sleep(800);
     await shot('kitchen-02-working.png');
-    await waitState('Grace', 'done', 40000);
+
+
+    await waitState('Grace', 'done', 60000);
     await idle();
 
     // 03: close-up of the head chef / pass
@@ -109,7 +134,7 @@ const FAKE = makeFakeClaudeDir();
     await sendTo('Ken', 'browse the stock list');
     await sendTo('Linus', 'browse the pantry shelf');
     await sendTo('Grace', 'chop the garnish');
-    await sendTo('Alan', 'stir the reduction');
+    await sendTo('Margaret', 'stir the reduction');
     await page.evaluate(() => window.harness.select(null));
     await page.waitForFunction(() => {
       const st = window.harness.states();
