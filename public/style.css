@@ -24,7 +24,9 @@ body { display: flex; flex-direction: column; }
 .btn.red { background: #5a2226; border-color: var(--red); }
 .btn.small { padding: 3px 10px; }
 main { flex: 1; display: flex; min-height: 0; }
-#stage { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; background: #1a1410; overflow: hidden; }
+#stage { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; background: #1a1410; overflow: hidden; }
+#cookKeys { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+#cookKeys:not(:focus-within) { width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }   /* shows up when Tab reaches a cook */
 #office { image-rendering: pixelated; display: block; cursor: default; }
 #chat { width: 380px; flex: none; background: var(--panel); border-left: 2px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
 #chatEmpty { margin: auto; text-align: center; padding: 20px; color: var(--dim); }

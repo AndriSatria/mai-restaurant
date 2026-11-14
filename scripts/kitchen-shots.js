@@ -9,6 +9,7 @@
 //   kitchen-07-hands.png     the head chef's /code-review: kitchen hands at the pantry, a dish coming back to the pass
 //   kitchen-08-approvals.png a line cook and the head chef hold plates up at the pass, "Yes, chef" / "No, chef" in the side panel
 //   kitchen-09-resting.png   every plan ran out: the cooks rest at the staff table under the "Back at HH:MM" board
+//   kitchen-10-reactions.png a failed run boils a pot over, failed shell commands set the grill and stove on fire, a clicked cook looks up
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -210,6 +211,24 @@ const FAKE = makeFakeClaudeDir();
     await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
     await sleep(600);
     await shot('kitchen-09-resting.png');
+
+    // 10: small reactions (a run that goes through reopens the kitchen first)
+    await sendTo('Ada', 'ready the plate'); await sendTo('Grace', 'hello'); await sendTo('Linus', 'hello');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => !window.harness.closed(), null, { timeout: 30000 });
+    await idle(30000);
+    await sleep(1500);
+    const reacted = (name, key) => page.waitForFunction(([n, k]) => [...window.harness.agents.values()].some((a) => a.name === n && performance.now() - (a[k] || -1e9) < 1500), [name, key], { timeout: 30000 });
+    await sendTo('Ken', 'please fail');
+    await page.evaluate(() => window.harness.select(null));
+    await reacted('Ken', 'errAt');
+    await sendTo('Alan', 'burn the steak'); await sendTo('Barbara', 'burn the sauce');
+    await page.evaluate(() => window.harness.select(null));
+    await reacted('Alan', 'fireAt'); await reacted('Barbara', 'fireAt');
+    await page.evaluate(() => { const a = [...window.harness.agents.values()].find((x) => x.name === 'Linus'); window.harness.select(a.id); });
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
+    await sleep(300);
+    await shot('kitchen-10-reactions.png');
   } finally {
     await browser.close(); srv.kill();
   }

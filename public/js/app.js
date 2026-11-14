@@ -82,6 +82,7 @@
           const prev = a.state, prevSlot = a.slot;
           Object.assign(a, agent); slotMoved(a, prevSlot);
           if (prev !== a.state && a.state === 'thinking') a.bubble = null;
+          if (prev !== a.state && a.state === 'error') a.errAt = performance.now();   // the pot boils over
           syncHelp(a, false);
         }
         if (a.id === selectedId) updateHead();
@@ -123,6 +124,7 @@
         const a = agents.get(m.id); if (!a) break;
         const msg = a.transcript.find((x) => x.mid === m.mid); if (!msg) break;
         Object.assign(msg, m.patch);
+        if (m.patch.status === 'error' && toolTrip(msg.tool) === 'stove') a.fireAt = performance.now();   // a failed shell command: small stove fire
         if (m.id === selectedId) updateMsgEl(msg);
         break;
       }
@@ -146,7 +148,7 @@
   // ---------- chat panel ----------
   let msgEls = new Map();
   const tr = $('transcript');
-  function select(id) { selectedId = id; closeSlash(); renderChat(true); if (id) $('input').focus(); }
+  function select(id) { selectedId = id; closeSlash(); renderChat(true); if (id) { agents.get(id).lookAt = performance.now(); $('input').focus(); } }
 
   function renderChat(full) {
     const a = agents.get(selectedId);
@@ -493,6 +495,9 @@
         planAge: a.planAt && now - a.planAt < 3200 * TS ? (now - a.planAt) / 1000 : null,
         huddle: a.huddle && now < a.huddle.until ? (now - a.huddle.t0) / 1000 : null,
         faceOv: a.turn && now < a.turn.until && !a.away ? a.turn.face : null,
+        lookUp: !!a.lookAt && now - a.lookAt < 1500 * TS,
+        boil: a.errAt && now - a.errAt < 6000 * TS && !a.limit ? (now - a.errAt) / 1000 : null,
+        fire: !!a.fireAt && now - a.fireAt < 5000 * TS,
         rcv: a.rcv ? { age: (now - a.rcv.t0) / 1000, ok: a.rcv.ok } : null };
     });
   }
@@ -915,6 +920,23 @@
     }
   }
 
+  // keyboard / screen reader way to pick a cook, same as clicking them on the canvas
+  let cookSig = '';
+  function renderCookKeys() {
+    const list = [...agents.values()].sort((p, q) => p.slot - q.slot);
+    const sig = list.map((a) => a.id + ':' + a.name).join('|');
+    if (sig === cookSig) return;
+    cookSig = sig;
+    const box = $('cookKeys'); box.textContent = '';
+    for (const a of list) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn small'; b.textContent = a.name;
+      b.setAttribute('aria-label', `Open ${a.name}'s chat`);
+      b.addEventListener('click', () => select(a.id));
+      box.append(b);
+    }
+  }
+
   // ---------- main loop ----------
   function resize() {
     const stage = $('stage'); const dpr = window.devicePixelRatio || 1;
@@ -929,7 +951,7 @@
   let last = performance.now(), closedSaid = null;
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    update(dt, now); updateHelp(now); renderAsks();
+    update(dt, now); updateHelp(now); renderAsks(); renderCookKeys();
     const closed = closedView();
     if (closed !== closedSaid) { closedSaid = closed; $('closedNote').textContent = closed ? `Kitchen closed, the plan limit ran out. ${closed}.` : ''; }
     Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now), closed });

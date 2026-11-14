@@ -39,6 +39,9 @@ Every message you send runs the real CLI in print mode (`claude -p` or `agent -p
 | Stop | Esc in the message box or **■ Stop** ends the run. |
 | Nothing to do | Idle cooks stretch, read, get a coffee, chat by the walk-in fridge or take a break at the staff table. |
 | The plan's usage limit runs out | Every cook on that CLI rests at the staff table, and a board over it reads **KITCHEN CLOSED, Back at 18:30**, the reset time from the CLI's limit message. The kitchen opens again at that time, or as soon as a run goes through. |
+| Click a cook | They look up at you. By keyboard, Tab past the top buttons to a list of cooks and press Enter. |
+| A run fails | The cook's stock pot boils over for a few seconds. |
+| A shell command fails | A small fire flares up on the stove. |
 
 The first person you hire stands at the pass as head chef (tall toque). Up to 7 people fit in the kitchen: 6 cook stations and the pass.
 

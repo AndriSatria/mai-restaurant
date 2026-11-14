@@ -447,6 +447,26 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     await page.waitForFunction(() => !window.harness.closed() && window.harness.states().every((s) => !s.away), null, { timeout: 30000 });
     assert(true, 'a run that goes through reopens the kitchen and the cooks walk back');
 
+    // ---- small reactions: a picked cook looks up (canvas click or the keyboard list), failed shell -> stove fire, failed run -> boil-over ----
+    await page.evaluate(() => window.harness.select(null));
+    await page.focus('#hireBtn');
+    let tabs = 0;
+    while (tabs++ < 10 && !(await page.evaluate(() => document.activeElement && document.activeElement.parentElement && document.activeElement.parentElement.id === 'cookKeys'))) await page.keyboard.press('Tab');
+    const key = await page.evaluate(() => { const b = document.activeElement, r = b.getBoundingClientRect(); return { label: b.getAttribute('aria-label'), text: b.textContent, w: r.width, n: document.querySelectorAll('#cookKeys button').length }; });
+    assert(key.n === 5 && key.label === `Open ${key.text}'s chat` && key.w > 20, `Tab reaches a visible cook button with an accessible name: ${key.label} (${key.n} buttons)`);
+    await page.keyboard.press('Enter');
+    const picked = await page.evaluate((n) => { const a = [...window.harness.agents.values()].find((x) => x.name === n); return { sel: window.harness.selected === a.id, look: performance.now() - (a.lookAt || -1e9) < 1000 }; }, key.text);
+    assert(picked.sel && picked.look, 'Enter on the button opens that cook\'s chat and the cook looks up');
+    const hidden = await page.evaluate(() => document.getElementById('cookKeys').getBoundingClientRect().width <= 1);
+    assert(hidden, 'the cook buttons hide again once focus leaves them');
+    await page.evaluate(() => window.harness.select(null));
+    const burnId = await page.evaluate(() => { const a = [...window.harness.agents.values()].find((x) => x.name === 'Linus'); window.harness.send({ type: 'send', id: a.id, text: 'burn the toast' }); return a.id; });
+    await page.waitForFunction((id) => window.harness.agents.get(id).fireAt > 0, burnId, { timeout: 15000 });
+    assert(true, 'a failed Bash call sets the stove on fire');
+    await page.evaluate((id) => window.harness.send({ type: 'send', id, text: 'please fail' }), burnId);
+    await page.waitForFunction((id) => window.harness.agents.get(id).errAt > 0, burnId, { timeout: 20000 });
+    assert(true, 'a failed run boils the pot over');
+
     // ---- chat panel: Claude Code style formatting stays safe (model text is never parsed as HTML) ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);
     await page.waitForFunction(() => !document.getElementById('stopBtn').offsetParent, null, { timeout: 30000 }).catch(() => {});
