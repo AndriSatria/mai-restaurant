@@ -215,6 +215,25 @@ const waitFor = async (fn, ms = 15000) => { const t = Date.now(); while (Date.no
   await waitFor(() => log.slice(mark).some((m) => m.type === 'agent' && m.agent.id === ids.Cla.id && m.agent.state === 'done'), 10000);
   assert(true, 'exit-early: the run ends normally');
 
+  // approvals at the pass: can_use_tool over stdio -> ask on the agent -> "approve" from the client -> control_response
+  for (const allow of [true, false]) {
+    await sleep(1500);
+    mark = log.length;
+    ws.send(JSON.stringify({ type: 'send', id: ids.Cla.id, text: 'ask before cleaning' }));
+    const ask = (await waitFor(() => log.slice(mark).find((m) => m.type === 'agent' && m.agent.id === ids.Cla.id && m.agent.ask), 10000)).agent.ask;
+    assert(ask.tool === 'Bash' && ask.summary === 'rm -rf dist' && ask.reqId === 'req-1', `approval: the agent asks for Bash rm -rf dist (${allow ? 'yes' : 'no'} run)`);
+    if (allow) {
+      ws.send(JSON.stringify({ type: 'approve', id: ids.Cla.id, reqId: 'nope', allow: true }));
+      await waitFor(() => log.slice(mark).some((m) => m.type === 'error' && /no longer waiting/.test(m.message)), 5000);
+      assert(true, 'approval: an unknown request id is rejected');
+    }
+    ws.send(JSON.stringify({ type: 'approve', id: ids.Cla.id, reqId: ask.reqId, allow }));
+    await waitFor(() => log.slice(mark).some((m) => m.type === 'agent' && m.agent.id === ids.Cla.id && m.agent.state === 'done'), 10000);
+    const said = log.slice(mark).filter((m) => m.type === 'msg' && m.id === ids.Cla.id).map((m) => m.msg.text).join('\n');
+    assert(said.includes(`(fake claude) ${allow ? 'approved' : 'rejected'}: rm -rf dist`) && said.includes(`${allow ? 'Approved' : 'Rejected'}: Bash`), `approval: ${allow ? '"Yes, chef"' : '"No, chef"'} reaches the CLI and the chat`);
+    assert(lastAgent(ids.Cla.id).ask === null, 'approval: the raised plate comes down after the answer');
+  }
+
   // agent-to-agent message
   mark = log.length;
   ws.send(JSON.stringify({ type: 'relay', from: ids.Moc.id, to: ids.Cur.id, text: 'can you review my diff?' }));

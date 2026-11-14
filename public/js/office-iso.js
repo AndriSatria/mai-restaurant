@@ -758,7 +758,9 @@
     head(c, look, -30 - bob + nod, front, { blink, mood, hat: (ag.slot === MGR || ag.main) ? 'toque' : 'cap' });
     const sw = walking ? (fr === 1 ? 1 : fr === 3 ? -1 : 0) : 0;
     let N = [-5, -9 + sw * 2], Fh = [5, -9 - sw * 2];
-    if (ag.carry) { N = [3, -14]; Fh = [8, -14]; }
+    const asking = ag.ask && !walking;     // waiting for "Yes, chef": the plate goes up on the far side, clear of the hat
+    if (asking) { N = [-9, -30]; Fh = [5, -9]; }
+    else if (ag.carry) { N = [3, -14]; Fh = [8, -14]; }
     else if (ag.mode === 'drink') { const sip = Math.floor(t * 1.5) % 2; Fh = [4, -17 - (sip ? 3 : 0)]; N = [-5, -9]; ret.mug = [Fh[0], Fh[1] - 6]; }
     else if (ag.mode === 'pantry' && !walking) { const reach = Math.abs(Math.sin(t * 2.2 + ag.phase * 4)); N = [-3, -22 - reach * 5]; Fh = [6, -16 - (1 - reach) * 3]; }
     else if (ag.mode === 'bell' && !walking) { const ding = Math.floor(t * 3 + ag.phase) % 4 === 0; N = [-5, -9]; Fh = ding ? [8, -22] : [6, -14]; }
@@ -797,7 +799,8 @@
     } else if (pose === 'wait' && ag.talk != null) { const g = Math.floor(t * 4) % 2; Fh = [ag.talkDir > 0 ? 8 : 6, -19 - g * 3]; }
     limb(c, 4, -18 - bob, Fh[0], Fh[1], look, 1, true);
     limb(c, -4, -18 - bob, N[0], N[1], look, -1, false);
-    if (ag.carry) { disc(c, 6, -16, 4, '#f0eee8'); disc(c, 6, -16, 3, '#fff'); disc(c, 6, -17, 2, ag.carry === 'burnt' ? '#3a2a20' : '#c84830'); }
+    if (asking) { disc(c, -10, -33, 4, '#f0eee8'); disc(c, -10, -33, 3, '#fff'); disc(c, -10, -34, 2, '#c84830'); }
+    else if (ag.carry) { disc(c, 6, -16, 4, '#f0eee8'); disc(c, 6, -16, 3, '#fff'); disc(c, 6, -17, 2, ag.carry === 'burnt' ? '#3a2a20' : '#c84830'); }
     else if (ag.mode === 'drink') { const hx = Fh[0], hy = Fh[1]; R(c, hx - 2, hy - 5, 5, 5, '#f5f5f0'); R(c, hx + 3, hy - 4, 1, 3, '#f5f5f0'); R(c, hx - 2, hy - 5, 5, 1, '#5b3a1e'); }
     else if (!walking && !ag.away && ag.act === 'read') {
       const cov = ['#8e4ec6', '#3e8ef7', '#e5484d', '#30a46c'][ag.slot % 4], by2 = -16;
@@ -1189,7 +1192,8 @@
       ctx.fillStyle = dotCol; ctx.fillRect(Math.round(left + 5 * U), Math.round(labY - 3 * U), Math.round(5 * U), Math.round(5 * U));
       if (tb) pillText(ctx, tb.text, left + nw + gap + bw / 2, labY, U * 0.8, tb.fg, tb.bg, true);
       // tool chip floats just above the head (over the monitor it would cover the face)
-      if (!e.away && e.huddle != null) pillText(ctx, 'team wrap-up', p.ax * S, (p.head - 5) * S, U * 0.9, '#2a1f00', '#f5c542', true);
+      if (e.ask && (!e.away || e.mode === 'ask')) pillText(ctx, 'asks: ' + e.ask, p.ax * S, (p.head - 5) * S, U * 0.9, '#2a1f00', '#ffd23f', true);
+      else if (!e.away && e.huddle != null) pillText(ctx, 'team wrap-up', p.ax * S, (p.head - 5) * S, U * 0.9, '#2a1f00', '#f5c542', true);
       else if (!e.away && e.waiting > 0) pillText(ctx, 'waiting on ' + e.waiting + ' helper' + (e.waiting > 1 ? 's' : '') + '.'.repeat(1 + Math.floor(t * 2) % 3), p.ax * S, (p.head - 5) * S, U * 0.9, '#2a1f00', '#f5c542', true);
       else if ((!e.away || e.meet || e.dest === 'pantry' || e.dest === 'bell' || e.dest === 'heat') && e.state === 'working') pillText(ctx, e.tool || 'cooking…', p.ax * S, (p.head - 5) * S, U * 0.9, '#0e1f1a', '#5ff2a5', true);
       if (e.help && !e.away && e.help.desk) {       // "helping <lead>" tag under the name pill

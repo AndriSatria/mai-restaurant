@@ -21,6 +21,7 @@
     <section id="stage"><canvas id="office" width="384" height="240"></canvas></section>
 
     <aside id="chat">
+      <section id="asks" aria-label="Approvals waiting at the pass" aria-live="polite" hidden></section>
       <div id="chatEmpty">
         <div class="big">☝</div>
         <p>Click a pixel person to open their chat.</p>
@@ -64,7 +65,7 @@
       <label>Name <input id="hireName" maxlength="24" required autocomplete="off"></label>
       <fieldset id="typeChoice"><legend>Agent type</legend><div id="typeOptions"></div></fieldset>
       <label>Working directory <input id="hireCwd" autocomplete="off" spellcheck="false"></label>
-      <label>Permission mode <select id="hirePerm" title="Plan: the agent plans first (Claude Code --permission-mode plan) and everybody gathers at the pass"><option value="">Usual (accept edits for Claude)</option><option value="default">Default (tools not pre-approved are denied)</option><option value="plan">Plan (plan first, gather at the pass)</option></select></label>
+      <label>Permission mode <select id="hirePerm" title="Plan: the agent plans first (Claude Code --permission-mode plan) and everybody gathers at the pass"><option value="">Usual (accept edits for Claude)</option><option value="default">Default (Claude asks at the pass before edits and commands)</option><option value="plan">Plan (plan first, gather at the pass)</option></select></label>
       <div id="hireNote" class="dim"></div>
       <div class="row">
         <button type="button" id="hireCancel" class="btn">Cancel</button>

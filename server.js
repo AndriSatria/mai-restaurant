@@ -72,6 +72,7 @@ wss.on('connection', (ws) => {
         case 'interrupt': harness.interrupt(m.id); break;
         case 'promote': harness.setMain(m.id); break;
         case 'permission': harness.setPermissionMode(m.id, m.mode); break;
+        case 'approve': harness.answer(m.id, m.reqId, m.allow === true); break;
         case 'relay': harness.relay(m.from, m.to, m.text); break;
         case 'resume': harness.resume(m.sessionId, m.source); break;
         default: break;

@@ -7,6 +7,7 @@
 //   kitchen-05-tickets.png   pass rail with pending, in-progress and done tickets
 //   kitchen-06-line.png      close view of the two joined counter runs and their six sets
 //   kitchen-07-hands.png     the head chef's /code-review: kitchen hands at the pantry, a dish coming back to the pass
+//   kitchen-08-approvals.png a line cook and the head chef hold plates up at the pass, "Yes, chef" / "No, chef" in the side panel
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -182,6 +183,21 @@ const FAKE = makeFakeClaudeDir();
     }, null, { timeout: 60000 });
     await sleep(300);
     await shot('kitchen-07-hands.png');
+
+    // 08: approvals at the pass
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id }); });
+    await idle(30000).catch(() => {});
+    await page.waitForFunction(() => window.harness.states().every((s) => !s.helping), null, { timeout: 60000 });
+    await sleep(3000);   // helpers keep new messages for a moment after their job
+    await sendTo('Grace', 'ask before cleaning');   // Grace runs the fake Claude CLI: the stdio permission prompt
+    await sendTo('Ada', 'ask before cleaning');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => {
+      const st = window.harness.states();
+      return st.filter((s) => s.ask).length === 2 && st.some((s) => s.ask && s.mode === 'ask');
+    }, null, { timeout: 60000 });
+    await sleep(600);
+    await shot('kitchen-08-approvals.png');
   } finally {
     await browser.close(); srv.kill();
   }

@@ -304,7 +304,7 @@ Environment knobs:
 | `HOST` | `127.0.0.1` | bind address (keep it loopback unless you know what you're doing) |
 | `HARNESS_MODE` | auto | `claude` or `mock` |
 | `HARNESS_CLAUDE_BIN` | `claude` on PATH | path to the CLI |
-| `HARNESS_PERMISSION_MODE` | `acceptEdits` | the mode new agents start in (each agent's mode is then switched in its chat and passed as `--permission-mode`). Headless runs can't answer permission prompts, so tools not pre-approved are denied, add e.g. `HARNESS_CLAUDE_ARGS="--allowedTools Bash,Read,Edit"` |
+| `HARNESS_PERMISSION_MODE` | `acceptEdits` | the mode new agents start in (each agent's mode is then switched in its chat and passed as `--permission-mode`). Tools the mode doesn't allow come to the pass as an approval (`--permission-prompt-tool stdio`); pre-approve with e.g. `HARNESS_CLAUDE_ARGS="--allowedTools Bash,Read,Edit"` |
 | `HARNESS_ALLOW_BYPASS` | off | `1` adds `bypassPermissions` to the Shift+Tab cycle (dangerous) |
 | `HARNESS_CLAUDE_ARGS` | – | extra whitespace-separated CLI args (`--model sonnet` …) |
 | `HARNESS_PARTIAL` | off | `1` adds `--include-partial-messages` |
@@ -370,7 +370,7 @@ scripts/demo-video.js     records demo/mai-office-demo.mp4 and demo/mai-office-d
 scripts/test-adapters.js  end-to-end test of all agent types + type persistence (`npm run test:adapters`)
 ```
 
-WebSocket protocol, client→server: `hire {name,cwd,agentType}`, `fire {id}`, `send {id,text}`, `interrupt {id}`, `relay {from,to,text}`, `promote {id}`, `permission {id,mode}`, `resume {sessionId,source:'claude'|'cursor'}`; `hire` also takes `permissionMode` and `slot`;
+WebSocket protocol, client→server: `hire {name,cwd,agentType}`, `fire {id}`, `send {id,text}`, `interrupt {id}`, `relay {from,to,text}`, `promote {id}`, `permission {id,mode}`, `approve {id,reqId,allow}` (answers the agent's `ask {reqId,tool,summary}`), `resume {sessionId,source:'claude'|'cursor'}`; `hire` also takes `permissionMode` and `slot`;
 server→client: `snapshot`, `agent` (state/tool updates), `removed`, `msg`, `msg_update` (streamed text), `msg_patch` (tool result/status), `subagent`, `team`, `relay`, `error`.
 
 ## Regenerate screenshots
@@ -391,6 +391,6 @@ scale (×7 at DPR 2), so nothing is resampled; the script asserts this before ca
 ## Known limitations / ideas
 
 * Max 7 agents (6 stations + the pass); fixed kitchen layout; the isometric camera is fixed (no rotation/zoom); bubbles of different agents can overlap.
-* Claude and Cursor modes are untested with the real CLIs; plan-mode detection (`permissionMode: plan` in init, `ExitPlanMode` tool use) is only exercised through `scripts/fake-claude.js`, Cursor flags are from `agent --help` but not run logged in; no tool-permission prompts in headless mode; one process per message.
+* Claude and Cursor modes are untested with the real CLIs; plan-mode detection (`permissionMode: plan` in init, `ExitPlanMode` tool use) is only exercised through `scripts/fake-claude.js`, Cursor flags are from `agent --help` but not run logged in; Claude approvals (stdio `can_use_tool`) are only exercised through `scripts/fake-claude.js`, and Cursor print mode has no approval path at all; one process per message.
 * No auth; long transcripts are capped at 300 messages per agent.
 * Next: `/clear`/new-session button, per-agent model settings, sound, day/night cycle.

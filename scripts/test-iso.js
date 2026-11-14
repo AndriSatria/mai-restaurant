@@ -414,6 +414,25 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(tkSel === tCooks.linus, 'clicking a ticket selects that cook and opens their chat (got ' + tkSel + ')');
     await page.evaluate(() => window.harness.select(null));
 
+    // ---- approvals at the pass: the cook walks up with the plate raised, "Yes, chef" in the side panel answers ----
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id }); });
+    await sleep(400);
+    const askId = await page.evaluate(() => { const a = [...window.harness.agents.values()].find((x) => x.name === 'Linus'); window.harness.send({ type: 'send', id: a.id, text: 'ask before cleaning' }); return a.id; });
+    await page.waitForFunction((id) => { const s = window.harness.states().find((a) => a.id === id); return s && s.ask && s.mode === 'ask'; }, askId, { timeout: 20000 });
+    const ap = await page.evaluate((id) => {
+      const s = window.harness.states().find((a) => a.id === id), box = document.getElementById('asks');
+      const btns = [...box.querySelectorAll('button')], r = box.getBoundingClientRect(), chat = document.getElementById('chat').getBoundingClientRect();
+      return { x: s.x, y: s.y, shown: !box.hidden, text: box.textContent, labels: btns.map((b) => b.getAttribute('aria-label')), inside: r.left >= chat.left && r.right <= chat.right && box.scrollWidth <= box.clientWidth };
+    }, askId);
+    assert(ap.x > 6 && ap.x < 10 && ap.y < 3, 'an asking cook stands at the pass: ' + ap.x.toFixed(2) + ',' + ap.y.toFixed(2));
+    assert(ap.shown && /Linus asks to run Bash rm -rf dist/.test(ap.text) && ap.labels.join() === 'Approve Bash for Linus,Reject Bash for Linus', 'the side panel lists the request with labelled Yes / No buttons: ' + ap.text);
+    assert(ap.inside, 'the approvals box fits the side panel without overflow');
+    await page.click('#asks button.green');
+    await page.waitForFunction((id) => { const s = window.harness.states().find((a) => a.id === id); return s && !s.ask && document.getElementById('asks').hidden; }, askId, { timeout: 10000 });
+    assert(true, '"Yes, chef" clears the request and the box hides');
+    await page.waitForFunction((id) => [...window.harness.agents.get(id).transcript].some((m) => m.text === 'Approved: Bash'), askId, { timeout: 10000 });
+    assert(true, 'the chat records "Approved: Bash"');
+
     // ---- chat panel: Claude Code style formatting stays safe (model text is never parsed as HTML) ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);
     await page.waitForFunction(() => !document.getElementById('stopBtn').offsetParent, null, { timeout: 30000 }).catch(() => {});

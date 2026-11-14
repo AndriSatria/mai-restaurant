@@ -33,6 +33,7 @@ Every message you send runs the real CLI in print mode (`claude -p` or `agent -p
 | Subagents and background agents (e.g. `/code-review`) | Idle colleagues become kitchen hands. The head chef hands each one a ticket, they walk to the station their tools need (pantry for reads, stove for Bash), carry the dish back to the pass, then go home. The lead waits until all of them report. |
 | Plan mode | The team walks to the pass. When the plan is ready they cheer and go back. |
 | Slash commands | Type `/` to pick from your own commands and skills (`~/.claude/commands`, skills, plugins, project folders). The text goes to the CLI unchanged. |
+| A Claude tool needs your OK | The cook walks to the pass and holds the plate up. **Yes, chef** or **No, chef** at the top of the side panel answers the CLI. |
 | Permission modes | Shift+Tab in the message box cycles modes, like the CLI: default, accept edits and plan for Claude; default, plan and ask for Cursor. |
 | Resume a session | **Sessions** lists your local Claude Code sessions and Cursor CLI chats by project. **Resume in kitchen** seats one at a station with its history. |
 | Stop | Esc in the message box or **■ Stop** ends the run. |
@@ -45,7 +46,7 @@ The first person you hire stands at the pass as head chef (tall toque). Up to 7 
 - Terminal sessions are not live-synced. Resume copies a session's history when you click it. Later changes in your terminal do not show up.
 - Cursor editor chats can't be resumed, only Cursor CLI chats.
 - Interactive CLI built-ins (`/clear`, `/model`, `/resume`, login prompts) don't work, because every run is headless.
-- Headless runs can't answer permission prompts. A tool the current mode doesn't allow is denied. Use accept edits, or pre-approve tools with `HARNESS_CLAUDE_ARGS`.
+- Approvals at the pass work for Claude Code only, through the Agent SDK's stdio permission prompt. Cursor's print mode has no way to ask, so a Cursor run in default mode only proposes edits. Its `agent acp` server can ask, but this app doesn't use it yet.
 - The Claude and Cursor adapters are tested against fake CLIs that follow the documented output, not against a logged-in CLI.
 
 ## Settings

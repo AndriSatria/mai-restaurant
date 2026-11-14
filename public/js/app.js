@@ -488,7 +488,7 @@
         phase: a.phase, away: a.away, x: a.x, y: a.y, face: a.face || 0, mode: a.mode, dest: a.dest || null, cook: a.cook || null, bubble,
         act: a.act ? a.act.kind : null, actP: a.act ? (now - a.act.t0) / 1000 : 0,
         talk: htalk != null ? htalk : talk, talkDir: htalk != null ? htalkDir : (a.chatSide === 0 ? 1 : -1),
-        help: helpV, waiting: (a.subs || []).length, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1) && a.help ? (a.help.phase === 'failed' ? 'burnt' : 'ok') : null,
+        help: helpV, waiting: (a.subs || []).length, ask: a.ask ? a.ask.tool : null, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1) && a.help ? (a.help.phase === 'failed' ? 'burnt' : 'ok') : null,
         planAge: a.planAt && now - a.planAt < 3200 * TS ? (now - a.planAt) / 1000 : null,
         huddle: a.huddle && now < a.huddle.until ? (now - a.huddle.t0) / 1000 : null,
         faceOv: a.turn && now < a.turn.until && !a.away ? a.turn.face : null,
@@ -657,7 +657,7 @@
   const joinable = (a, o) => !a.away && a.mode === 'sit' && !a.act && !a.help && !a.pendingHelp && !a.helping && !a.queued && !busy(a) && a.id !== selectedId && a !== o;
   const wantsHome = (a) => {
     if (a.away && a.dest === 'serve') return !a.help;
-    if (a.away && (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat')) return tripOf(a) !== (a.dest === 'heat' ? 'stove' : a.dest);
+    if (a.away && (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat' || a.dest === 'ask')) return tripOf(a) !== (a.dest === 'heat' ? 'stove' : a.dest);
     if (a.away && a.dest === 'meet') { const o = planOwner(); return !meetingFor(a) || (a !== o && (busy(a) || !!a.help || !!a.helping || a.id === selectedId)); }
     return !!a.help || busy(a) || a.id === selectedId || !!planOwner();
   };
@@ -683,6 +683,7 @@
     return null;
   }
   function tripOf(a) {
+    if (a.ask) return a.slot === Office.MGR ? null : 'ask';   // a permission request: up to the pass (the head chef is already there)
     if (a.help) {
       const h = a.help;
       if (h.phase !== 'work' || performance.now() < h.arrivedAt + 1800 * TS) return null;   // the ticket is still on its way
@@ -725,6 +726,7 @@
       return;
     }
     a.cook = (k === 'chop' || k === 'bell') ? k : null;
+    if (k === 'ask') { const spot = claimSpot('pass', a); if (spot) startWalk(a, spot, 'ask'); return; }
     if (k !== 'pantry' && k !== 'bell') return;
     if (k === 'bell' && a.slot === Office.MGR) return;
     const spot = claimSpot(k, a);
@@ -778,7 +780,7 @@
 
   function stepWalker(a, dt, now) {
     if (a.mode === 'meet') { if (wantsHome(a)) { if (!a.leaveAt) a.leaveAt = now + rand(0, 900) * TS; if (now >= a.leaveAt) { a.leaveAt = 0; leave(a); } } return; }
-    if (a.mode === 'pantry' || a.mode === 'bell' || a.mode === 'heat') { if (wantsHome(a)) leave(a); return; }
+    if (a.mode === 'pantry' || a.mode === 'bell' || a.mode === 'heat' || a.mode === 'ask') { if (wantsHome(a)) leave(a); return; }
     if (a.mode === 'serve') { if (now > a.serveUntil || !a.help) { a.pts = Office.walkPath(a.slot, a.spot); a.idx = a.pts.length - 1; leave(a); } return; }
     if (a.mode === 'drink') { if (now > a.drinkUntil || wantsHome(a)) leave(a); return; }
     if (a.mode === 'chat') {
@@ -798,7 +800,7 @@
           if (a.spot && a.spot.face !== undefined) a.face = a.spot.face;
           if (a.dest === 'meet') { a.mode = 'meet'; a.meetSince = now; }
           else if (a.dest === 'drink') { a.mode = 'drink'; a.drinkUntil = now + (WANDER_FAST ? 4000 : rand(5000, 10000)) * TS; }
-          else if (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat') { a.mode = a.dest; }
+          else if (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat' || a.dest === 'ask') { a.mode = a.dest; }
           else if (a.dest === 'serve') {      // dish handed over at the pass: the lead gets the ✓ / ! bubble
             a.mode = 'serve'; a.serveUntil = now + 1800 * TS;
             const p = a.help && agents.get(a.help.parentId); if (p) p.rcv = { t0: now, ok: a.help.phase !== 'failed' };
@@ -863,6 +865,33 @@
     return all;
   }
 
+  // ---------- approvals at the pass: one row per agent whose CLI is waiting for a yes / no ----------
+  let askSig = '';
+  function renderAsks() {
+    const list = [...agents.values()].filter((a) => a.ask);
+    const sig = list.map((a) => a.id + ':' + a.ask.reqId).join('|');
+    if (sig === askSig) return;          // rebuild only on change, so keyboard focus stays on the buttons
+    askSig = sig;
+    const box = $('asks');
+    box.hidden = !list.length; box.textContent = '';
+    for (const a of list) {
+      const { reqId, tool, summary } = a.ask;
+      const row = document.createElement('div'); row.className = 'ask';
+      const what = document.createElement('p'), who = document.createElement('b');
+      who.textContent = a.name; what.append(who, ` asks to run ${tool}`);
+      if (summary) { const code = document.createElement('code'); code.textContent = summary; what.append(' ', code); }
+      const btns = document.createElement('div'); btns.className = 'row';
+      for (const [label, cls, allow] of [['Yes, chef', 'btn green small', true], ['No, chef', 'btn red small', false]]) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = cls; b.textContent = label;
+        b.setAttribute('aria-label', `${allow ? 'Approve' : 'Reject'} ${tool} for ${a.name}`);
+        b.addEventListener('click', () => send({ type: 'approve', id: a.id, reqId, allow }));
+        btns.append(b);
+      }
+      row.append(what, btns); box.append(row);
+    }
+  }
+
   // ---------- main loop ----------
   function resize() {
     const stage = $('stage'); const dpr = window.devicePixelRatio || 1;
@@ -877,7 +906,7 @@
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    update(dt, now); updateHelp(now);
+    update(dt, now); updateHelp(now); renderAsks();
     Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now) });
     requestAnimationFrame(frame);
   }
@@ -889,7 +918,7 @@
     toolTrip,
     tickets: () => collectTickets(performance.now()),
     ticketHits: () => (Office.ticketHits && Office.ticketHits()) || [],
-    states: () => [...agents.values()].map((a) => ({ id: a.id, main: !!a.main, slot: a.slot, meet: a.away && a.mode === 'meet', dest: a.dest, name: a.name, type: a.type, state: a.state, tool: a.tool, x: a.x, y: a.y, away: a.away, mode: a.mode, act: a.act && a.act.kind, cook: a.cook || null, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1), subs: (a.subs || []).length, helping: a.help ? a.help.phase : null, home: !a.away, seated: !a.away && a.mode === 'sit' })),
+    states: () => [...agents.values()].map((a) => ({ id: a.id, main: !!a.main, slot: a.slot, meet: a.away && a.mode === 'meet', dest: a.dest, name: a.name, type: a.type, state: a.state, tool: a.tool, x: a.x, y: a.y, away: a.away, mode: a.mode, act: a.act && a.act.kind, cook: a.cook || null, ask: a.ask ? a.ask.reqId : null, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1), subs: (a.subs || []).length, helping: a.help ? a.help.phase : null, home: !a.away, seated: !a.away && a.mode === 'sit' })),
     help: (id) => { const a = agents.get(id); return a && a.help ? { phase: a.help.phase, parentId: a.help.parentId, role: a.help.role, label: a.help.label, tool: a.help.tool, say: a.help.say, x: a.x, y: a.y, mode: a.mode, away: a.away, seated: !a.away && a.mode === 'sit', peer: !!a.help.peer, tile: Math.floor(a.x) + ',' + Math.floor(a.y) } : null; },
     team: (id) => { const a = agents.get(id); return a ? a.team.slice() : []; },
     huddle: (id) => { const a = agents.get(id); return !!(a && a.huddle && performance.now() < a.huddle.until); },

@@ -4,7 +4,26 @@
 //   HARNESS_MODE=claude HARNESS_CLAUDE_BIN=$PWD/scripts/fake-claude.js npm start
 const args = process.argv.slice(2);
 const sep = args.indexOf('--');
-const prompt = sep >= 0 ? args.slice(sep + 1).join(' ') : '';
+let prompt = sep >= 0 ? args.slice(sep + 1).join(' ') : '';
+// --input-format stream-json: the prompt is the first stdin user message; control_responses answer our can_use_tool requests
+const streamIn = args.includes('--input-format') && args[args.indexOf('--input-format') + 1] === 'stream-json';
+const replies = new Map();   // request_id -> resolve
+let gotPrompt;
+const promptIn = new Promise((r) => { gotPrompt = r; });
+if (streamIn) {
+  let buf = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (c) => {
+    buf += c;
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i); buf = buf.slice(i + 1);
+      let o; try { o = JSON.parse(line); } catch (_) { continue; }
+      if (o.type === 'user') gotPrompt(typeof o.message.content === 'string' ? o.message.content : o.message.content.map((b) => b.text || '').join(' '));
+      if (o.type === 'control_response' && replies.has(o.response.request_id)) { replies.get(o.response.request_id)(o.response.response); replies.delete(o.response.request_id); }
+    }
+  });
+} else gotPrompt(prompt);
 const ri = args.indexOf('--resume');
 const sid = ri >= 0 ? args[ri + 1] : 'fake-session-' + Math.random().toString(36).slice(2, 8);
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\n');
@@ -159,7 +178,21 @@ async function plan() {
   out({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: sid });
 }
 
+// A Bash call the CLI wants approved: can_use_tool over the stdio control protocol, then the tool runs or is denied.
+async function ask() {
+  const input = { command: 'rm -rf dist' };
+  out({ type: 'assistant', session_id: sid, parent_tool_use_id: null, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'k1', name: 'Bash', input }] } });
+  out({ type: 'control_request', request_id: 'req-1', request: { subtype: 'can_use_tool', tool_name: 'Bash', input, tool_use_id: 'k1' } });
+  const r = await new Promise((res) => replies.set('req-1', res));
+  const ok = r.behavior === 'allow';
+  out({ type: 'user', session_id: sid, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'k1', is_error: !ok, content: ok ? 'removed dist/' : r.message }] } });
+  const text = `(fake claude) ${ok ? 'approved' : 'rejected'}: ${r.updatedInput ? r.updatedInput.command : input.command}`;
+  out({ type: 'assistant', session_id: sid, parent_tool_use_id: null, message: { role: 'assistant', content: [{ type: 'text', text }] } });
+  out({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: sid });
+}
+
 (async () => {
+  prompt = await promptIn;
   const pmi = args.indexOf('--permission-mode'), pmode = pmi >= 0 ? args[pmi + 1] : undefined;
   out({ type: 'system', subtype: 'init', session_id: sid, cwd: process.cwd(), tools: ['Bash', 'Read'], permissionMode: pmode || 'default',
     slash_commands: ['compact', 'cost', 'clear', 'model', 'security-review', 'frontend:component'], skills: ['pdf'] });
@@ -179,6 +212,7 @@ async function plan() {
     return;
   }
   if (pmode === 'plan') { await plan(); return; }
+  if (/^\s*ask\b/i.test(prompt)) { await ask(); return; }
   if (/code-review/i.test(prompt) && /foreground/i.test(prompt)) { await codeReview(); return; }
   if (/code-review/i.test(prompt)) { await codeReviewBg(); return; }
   if (/parallel|team/i.test(prompt)) { await team(); return; }
@@ -192,4 +226,4 @@ async function plan() {
   const text = `(fake claude, ${ri >= 0 ? 'resumed ' + sid : 'new session ' + sid}, cwd ${process.cwd()}, mode ${pmode || 'none'}) You said: ${prompt}`;
   out({ type: 'assistant', session_id: sid, message: { role: 'assistant', content: [{ type: 'text', text }] } });
   out({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: sid });
-})();
+})().finally(() => process.stdin.destroy());
