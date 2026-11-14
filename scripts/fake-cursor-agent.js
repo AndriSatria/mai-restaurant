@@ -22,6 +22,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   out({ type: 'system', subtype: 'init', apiKeySource: 'login', cwd: process.cwd(), model: 'Fake Model', permissionMode: 'default' });
   out({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: prompt }] } });
   await wait(700);
+  if (/^\s*limit\b/i.test(prompt)) { process.stderr.write('Error: You’ve hit your usage limit\nchatMessage: Your usage limits will reset when your monthly cycle ends on 12/1/2026.\n'); process.exit(1); }
   const hold = /^\s*browse\b/i.test(prompt) ? { readToolCall: { args: { path: 'recipes/stock.md' } } }
     : /^\s*chop\b/i.test(prompt) ? { editToolCall: { args: { path: 'src/garnish.js' } } }
     : /^\s*stir\b/i.test(prompt) ? { shellToolCall: { args: { command: 'npm test --silent' } } }

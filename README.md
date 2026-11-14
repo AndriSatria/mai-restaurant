@@ -37,7 +37,8 @@ Every message you send runs the real CLI in print mode (`claude -p` or `agent -p
 | Permission modes | Shift+Tab in the message box cycles modes, like the CLI: default, accept edits and plan for Claude; default, plan and ask for Cursor. |
 | Resume a session | **Sessions** lists your local Claude Code sessions and Cursor CLI chats by project. **Resume in kitchen** seats one at a station with its history. |
 | Stop | Esc in the message box or **■ Stop** ends the run. |
-| Nothing to do | Idle cooks stretch, read, get a coffee or chat by the walk-in fridge. |
+| Nothing to do | Idle cooks stretch, read, get a coffee, chat by the walk-in fridge or take a break at the staff table. |
+| The plan's usage limit runs out | Every cook on that CLI rests at the staff table, and a board over it reads **KITCHEN CLOSED, Back at 18:30**, the reset time from the CLI's limit message. The kitchen opens again at that time, or as soon as a run goes through. |
 
 The first person you hire stands at the pass as head chef (tall toque). Up to 7 people fit in the kitchen: 6 cook stations and the pass.
 
@@ -47,6 +48,7 @@ The first person you hire stands at the pass as head chef (tall toque). Up to 7 
 - Cursor editor chats can't be resumed, only Cursor CLI chats.
 - Interactive CLI built-ins (`/clear`, `/model`, `/resume`, login prompts) don't work, because every run is headless.
 - Approvals at the pass work for Claude Code only, through the Agent SDK's stdio permission prompt. Cursor's print mode has no way to ask, so a Cursor run in default mode only proposes edits. Its `agent acp` server can ask, but this app doesn't use it yet.
+- The closed board reads the limit message text ("You've hit your session limit · resets 6pm", Cursor's "monthly cycle ends on …"). If a CLI changes that wording, the kitchen stays open.
 - The Claude and Cursor adapters are tested against fake CLIs that follow the documented output, not against a logged-in CLI.
 
 ## Settings

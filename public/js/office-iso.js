@@ -1215,8 +1215,19 @@
       const psum = plan.summary && plan.summary.length > 72 ? plan.summary.slice(0, 69) + '…' : plan.summary;
       if (psum && plan.state === 'ready') bubs.push({ e: null, bub: psum, p: { ax: dp[0], head: dp[1] - 15 }, w: Math.min(Math.max(120 * U, 46 * S) + 12 * U, psum.length * 6.6 * U + 14 * U) });
     }
+    let board = null;
+    if (scene.closed) {   // chalkboard over the staff table, where the plan card floats: KITCHEN CLOSED / Back at HH:MM
+      const [bx, by] = planDocPos(), l1 = 'KITCHEN CLOSED', fr = Math.round(3 * U), chalk = '#26332c';
+      const w = Math.max(measurePill(ctx, l1, U, true), measurePill(ctx, scene.closed, U, true)), h = Math.round(32 * U);
+      const x = Math.round(bx * S - w / 2), y = Math.round(by * S - h);
+      ctx.fillStyle = '#5b3a1e'; ctx.fillRect(x - fr, y - fr, w + fr * 2, h + fr * 2);
+      ctx.fillStyle = chalk; ctx.fillRect(x, y, w, h);
+      pillText(ctx, l1, bx * S, y + Math.round(9 * U), U, '#ffd84a', chalk, true);
+      pillText(ctx, scene.closed, bx * S, y + Math.round(23 * U), U, '#f4f1e8', chalk, true);
+      board = { x: x - fr, y: y - fr, w: w + fr * 2, h: h + fr * 2 };
+    }
     bubs.sort((a, b) => a.p.ax - b.p.ax);
-    const placed = [];
+    const placed = board ? [board] : [];   // speech bubbles step up past the board instead of covering it
     for (const b of bubs) {
       const cx = b.p.ax * S; let bottom = (b.p.head - 18) * S;
       for (let k = 0; k < 12; k++) {

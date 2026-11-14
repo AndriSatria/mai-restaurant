@@ -468,7 +468,8 @@
         const beat = Math.floor((now - a.chatStart) / (1700 * TS));
         if (beat % 2 === a.chatSide) talk = Math.floor(beat / 2 + a.chatSide * 2) % 5;
       }
-      let helpV = null, htalk = null, htalkDir = 1, state = a.state, tool = a.tool;
+      const resting = a.away && a.mode === 'rest';
+      let helpV = null, htalk = null, htalkDir = 1, state = resting ? 'idle' : a.state, tool = a.tool;
       if (a.help) {
         const h = a.help, desk = !a.away && h.phase !== 'go';
         const pose = h.phase === 'go' ? 'walk' : h.phase === 'work' ? 'work' : (h.phase === 'failed' ? 'worry' : 'cheer');
@@ -485,7 +486,7 @@
           peerWith: pe ? pe.id : null, celebrate: desk && h.phase !== 'work' && !!(h.cheerUntil && now < h.cheerUntil) ? (now - (h.cheerUntil - 3400 * TS)) / 1000 : null };
       }
       return { id: a.id, name: a.name, type: a.type, slot: a.slot, look: a.look, state, tool, queued: a.queued, main: !!a.main, meet: a.away && a.mode === 'meet',
-        phase: a.phase, away: a.away, x: a.x, y: a.y, face: a.face || 0, mode: a.mode, dest: a.dest || null, cook: a.cook || null, bubble,
+        phase: a.phase, away: a.away, x: a.x, y: a.y, face: a.face || 0, mode: resting ? 'drink' : a.mode, dest: a.dest || null, cook: a.cook || null, bubble,
         act: a.act ? a.act.kind : null, actP: a.act ? (now - a.act.t0) / 1000 : 0,
         talk: htalk != null ? htalk : talk, talkDir: htalk != null ? htalkDir : (a.chatSide === 0 ? 1 : -1),
         help: helpV, waiting: (a.subs || []).length, ask: a.ask ? a.ask.tool : null, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1) && a.help ? (a.help.phase === 'failed' ? 'burnt' : 'ok') : null,
@@ -494,6 +495,15 @@
         faceOv: a.turn && now < a.turn.until && !a.away ? a.turn.face : null,
         rcv: a.rcv ? { age: (now - a.rcv.t0) / 1000, ok: a.rcv.ok } : null };
     });
+  }
+  // the earliest known reset among the CLIs that are out of plan usage, for the board on the staff table
+  function closedView() {
+    let on = false, at = Infinity;
+    for (const a of agents.values()) if (a.limit) { on = true; if (a.limit.at) at = Math.min(at, a.limit.at); }
+    if (!on) return null;
+    if (at === Infinity) return 'Back when the limit resets';
+    const d = new Date(at), hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    return d.toDateString() === new Date().toDateString() ? 'Back at ' + hm : 'Back ' + d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) + ', ' + hm;
   }
   const planView = () => { const o = planOwner(); return o ? { state: o.plan.state, summary: o.plan.summary || '', ownerId: o.id } : null; };
   const flightsView = (now) => flights.map((f) => ({ kind: f.kind, pid: f.pid, hid: f.hid, toId: f.toId, ok: f.ok, p: (now - f.t0) / f.dur }));
@@ -655,7 +665,10 @@
   const meetingFor = (a) => a.meetSeat >= 0 && !!planOwner();
   const busy = (a) => a.state !== 'idle' && a.state !== 'done';
   const joinable = (a, o) => !a.away && a.mode === 'sit' && !a.act && !a.help && !a.pendingHelp && !a.helping && !a.queued && !busy(a) && a.id !== selectedId && a !== o;
+  // out of plan usage and not running anything: on a break at the staff table until the limit resets
+  const offDuty = (a) => !!a.limit && !a.help && !a.helping && !a.ask && a.state !== 'thinking' && a.state !== 'working';
   const wantsHome = (a) => {
+    if (a.away && a.dest === 'rest') return !offDuty(a) && (!!a.help || busy(a) || a.id === selectedId || !!planOwner());
     if (a.away && a.dest === 'serve') return !a.help;
     if (a.away && (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat' || a.dest === 'ask')) return tripOf(a) !== (a.dest === 'heat' ? 'stove' : a.dest);
     if (a.away && a.dest === 'meet') { const o = planOwner(); return !meetingFor(a) || (a !== o && (busy(a) || !!a.help || !!a.helping || a.id === selectedId)); }
@@ -737,9 +750,16 @@
     a.pts = Office.walkPath(a.slot, spot); a.idx = 0; a.x = a.pts[0].x; a.y = a.pts[0].y;
     a.spot = spot; a.face = 0; a.away = true; a.mode = 'walk'; a.dest = dest; a.dir = 1; a.target = 1; a.chatStart = 0; a.waitSince = 0;
   }
+  function startRest(a) {
+    const used = new Set([...agents.values()].map((b) => b.meetSeat)), k = (Office.SEATS || []).findIndex((s) => !used.has(s.i));
+    if (k < 0) return;
+    a.meetSeat = k; a.act = null; a.turn = null;
+    startWalk(a, Office.SEATS[k], 'rest');
+  }
   function startActivity(a, kind, partner, now) {
     now = now || performance.now();
     if (kind === 'coffee') return startWalk(a, Office.SPOTS.coffee[0], 'drink');
+    if (kind === 'rest') return startRest(a);
     if (kind === 'chat' && partner) {
       a.partner = partner.id; partner.partner = a.id; a.chatSide = 0; partner.chatSide = 1;
       if (partner.act) partner.act = null;
@@ -752,7 +772,7 @@
   function pickActivity(a) {
     const opts = [['stretch', 2], ['read', 3], ['look', 3]];
     const mates = [...agents.values()].filter((b) => b !== a && canStart(b) && b.id !== hoverId);
-    if (!socialBusy()) { opts.push(['coffee', 3]); if (mates.length) opts.push(['chat', 3]); }
+    if (!socialBusy()) { opts.push(['coffee', 3], ['rest', 2]); if (mates.length) opts.push(['chat', 3]); }
     let r = Math.random() * opts.reduce((n, o) => n + o[1], 0), kind = opts[0][0];
     for (const [k, w] of opts) { if ((r -= w) < 0) { kind = k; break; } }
     startActivity(a, kind, kind === 'chat' ? mates[Math.floor(Math.random() * mates.length)] : null);
@@ -783,6 +803,7 @@
     if (a.mode === 'pantry' || a.mode === 'bell' || a.mode === 'heat' || a.mode === 'ask') { if (wantsHome(a)) leave(a); return; }
     if (a.mode === 'serve') { if (now > a.serveUntil || !a.help) { a.pts = Office.walkPath(a.slot, a.spot); a.idx = a.pts.length - 1; leave(a); } return; }
     if (a.mode === 'drink') { if (now > a.drinkUntil || wantsHome(a)) leave(a); return; }
+    if (a.mode === 'rest') { if (wantsHome(a) || (!offDuty(a) && now > a.restUntil)) leave(a); return; }
     if (a.mode === 'chat') {
       const p = agents.get(a.partner);
       const partnerHere = p && p.away && p.partner === a.id && p.mode === 'chat';
@@ -800,6 +821,7 @@
           if (a.spot && a.spot.face !== undefined) a.face = a.spot.face;
           if (a.dest === 'meet') { a.mode = 'meet'; a.meetSince = now; }
           else if (a.dest === 'drink') { a.mode = 'drink'; a.drinkUntil = now + (WANDER_FAST ? 4000 : rand(5000, 10000)) * TS; }
+          else if (a.dest === 'rest') { a.mode = 'rest'; a.restUntil = now + (WANDER_FAST ? 5000 : rand(9000, 16000)) * TS; }
           else if (a.dest === 'pantry' || a.dest === 'bell' || a.dest === 'heat' || a.dest === 'ask') { a.mode = a.dest; }
           else if (a.dest === 'serve') {      // dish handed over at the pass: the lead gets the ✓ / ! bubble
             a.mode = 'serve'; a.serveUntil = now + 1800 * TS;
@@ -815,6 +837,7 @@
     updateMeeting(now);
     for (const a of agents.values()) {
       if (!a.away) updateTrip(a);
+      if (!a.away && offDuty(a)) startRest(a);
       if (a.away) { stepWalker(a, dt, now); continue; }
       if (a.act && (a.state !== 'idle' || a.id === selectedId || now > a.act.until || planOwner())) endAct(a, now);
       if (WANDER && canStart(a) && now > a.nextAct) {
@@ -903,11 +926,13 @@
     canvas.style.width = (canvas.width / dpr) + 'px'; canvas.style.height = (canvas.height / dpr) + 'px';
   }
   window.addEventListener('resize', resize);
-  let last = performance.now();
+  let last = performance.now(), closedSaid = null;
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     update(dt, now); updateHelp(now); renderAsks();
-    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now) });
+    const closed = closedView();
+    if (closed !== closedSaid) { closedSaid = closed; $('closedNote').textContent = closed ? `Kitchen closed, the plan limit ran out. ${closed}.` : ''; }
+    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now), closed });
     requestAnimationFrame(frame);
   }
 
@@ -925,7 +950,8 @@
     tooltip: (id) => tooltip(agents.get(id)),
     flights: () => flights.map((f) => ({ kind: f.kind, pid: f.pid, hid: f.hid, toId: f.toId })),
     slow: TS,
-    // kind: coffee | chat (needs partnerId) | stretch | read | look   (ignores timers/eligibility; for demos & tests)
+    closed: closedView,
+    // kind: coffee | rest | chat (needs partnerId) | stretch | read | look   (ignores timers/eligibility; for demos & tests)
     forceActivity: (id, kind, partnerId) => { const a = agents.get(id); if (a && !a.away) startActivity(a, kind, partnerId ? agents.get(partnerId) : null); },
     forceWander: (id) => { const a = agents.get(id); if (a && !a.away) startActivity(a, 'coffee'); },
   };

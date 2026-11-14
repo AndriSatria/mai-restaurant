@@ -433,6 +433,20 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     await page.waitForFunction((id) => [...window.harness.agents.get(id).transcript].some((m) => m.text === 'Approved: Bash'), askId, { timeout: 10000 });
     assert(true, 'the chat records "Approved: Bash"');
 
+    // ---- plan limit: every cook rests at the staff table, the board shows when the kitchen opens again ----
+    await page.evaluate((id) => window.harness.send({ type: 'send', id, text: 'limit reached?' }), askId);
+    await page.waitForFunction(() => window.harness.states().every((s) => s.mode === 'rest'), null, { timeout: 30000 });
+    const rest = await page.evaluate(() => {
+      const O = window.Office, st = window.harness.states();
+      return { closed: window.harness.closed(), note: document.getElementById('closedNote').textContent,
+        atTable: st.every((s) => O.SEATS.some((q) => Math.hypot(q.x - s.x, q.y - s.y) < 0.01)), seats: new Set(st.map((s) => s.x.toFixed(2) + ',' + s.y.toFixed(2))).size, n: st.length };
+    });
+    assert(rest.atTable && rest.seats === rest.n, `limited cooks stand at their own staff-table spots (${rest.seats}/${rest.n})`);
+    assert(/^Back (at|[A-Z][a-z]{2} \d+,) \d\d:\d\d$/.test(rest.closed) && rest.note.includes(rest.closed), 'the board and the status line give the reset time: ' + rest.closed);
+    await page.evaluate((id) => window.harness.send({ type: 'send', id, text: 'ready the plate' }), askId);
+    await page.waitForFunction(() => !window.harness.closed() && window.harness.states().every((s) => !s.away), null, { timeout: 30000 });
+    assert(true, 'a run that goes through reopens the kitchen and the cooks walk back');
+
     // ---- chat panel: Claude Code style formatting stays safe (model text is never parsed as HTML) ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);
     await page.waitForFunction(() => !document.getElementById('stopBtn').offsetParent, null, { timeout: 30000 }).catch(() => {});

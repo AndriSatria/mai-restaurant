@@ -213,6 +213,7 @@ async function ask() {
   }
   if (pmode === 'plan') { await plan(); return; }
   if (/^\s*ask\b/i.test(prompt)) { await ask(); return; }
+  if (/^\s*limit\b/i.test(prompt)) { out({ type: 'result', subtype: 'success', is_error: true, api_error_status: 429, result: "You've hit your session limit · resets 11:30pm (UTC)", session_id: sid }); return; }
   if (/code-review/i.test(prompt) && /foreground/i.test(prompt)) { await codeReview(); return; }
   if (/code-review/i.test(prompt)) { await codeReviewBg(); return; }
   if (/parallel|team/i.test(prompt)) { await team(); return; }

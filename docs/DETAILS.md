@@ -349,6 +349,7 @@ cross-origin WebSocket connections, but there is **no authentication**, don't ex
 ```
 server.js                 express static + WebSocket hub
 lib/harness.js            agent registry, state machine, persistence, message queue, helper assignment / auto-hire, team feed
+lib/limits.js             plan-limit messages from Claude Code / Cursor -> reset time (the closed-kitchen board)
 lib/roles.js              role derivation from Task input + file-overlap / mention inference helpers
 lib/adapters/claude.js    Claude Code CLI adapter (stream-json)
 lib/adapters/cursor.js    Cursor CLI agent adapter (stream-json)

@@ -8,6 +8,7 @@
 //   kitchen-06-line.png      close view of the two joined counter runs and their six sets
 //   kitchen-07-hands.png     the head chef's /code-review: kitchen hands at the pantry, a dish coming back to the pass
 //   kitchen-08-approvals.png a line cook and the head chef hold plates up at the pass, "Yes, chef" / "No, chef" in the side panel
+//   kitchen-09-resting.png   every plan ran out: the cooks rest at the staff table under the "Back at HH:MM" board
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -198,6 +199,17 @@ const FAKE = makeFakeClaudeDir();
     }, null, { timeout: 60000 });
     await sleep(600);
     await shot('kitchen-08-approvals.png');
+
+    // 09: the plan limit ran out for all three CLIs (mock, Claude, Cursor): the kitchen closes
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id }); });
+    await idle(30000).catch(() => {});
+    await sleep(2000);
+    for (const n of ['Ada', 'Grace', 'Linus']) await sendTo(n, 'limit reached?');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => window.harness.states().every((s) => s.mode === 'rest'), null, { timeout: 60000 });
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
+    await sleep(600);
+    await shot('kitchen-09-resting.png');
   } finally {
     await browser.close(); srv.kill();
   }

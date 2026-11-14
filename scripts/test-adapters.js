@@ -8,6 +8,7 @@ const os = require('os');
 const WebSocket = require('ws');
 const { MGR_SLOT, MAX_AGENTS } = require('../lib/harness');
 const { makeFakeClaudeDir } = require('./fake-claude-dir');
+const { limitReset } = require('../lib/limits');
 const ROOT = path.join(__dirname, '..');
 const PORT = 3131;
 const DATA = path.join(os.tmpdir(), `mai-office-adapters-${Date.now()}.json`);
@@ -24,6 +25,19 @@ function client() {
   });
 }
 const waitFor = async (fn, ms = 15000) => { const t = Date.now(); while (Date.now() - t < ms) { const v = fn(); if (v) return v; await sleep(50); } throw new Error('timeout'); };
+
+{
+  // plan-limit messages -> reset time; NOW is 10:00 UTC = 17:00 in Jakarta
+  const NOW = Date.UTC(2026, 10, 15, 10, 0), at = (t) => { const r = limitReset(t, NOW); return r && r.at; };
+  assert(at("You've hit your session limit · resets 1:50pm (Europe/London)") === Date.UTC(2026, 10, 15, 13, 50), 'limit: "resets 1:50pm (Europe/London)" is later today');
+  assert(at("You've hit your session limit · resets 8am (Asia/Jakarta)") === Date.UTC(2026, 10, 16, 1, 0), 'limit: a time already past today rolls to tomorrow, in the given zone');
+  assert(at("You've hit your weekly limit · resets Jul 18, 12pm (UTC)") === Date.UTC(2027, 6, 18, 12, 0), 'limit: a past month and day roll to next year');
+  assert(at('Claude AI usage limit reached|1763200000') === 1763200000000, 'limit: the older "|epoch" form');
+  assert(at('Error: You’ve hit your usage limit\nchatMessage: Your usage limits will reset when your monthly cycle ends on 12/1/2026.') === new Date(2026, 11, 1).getTime(), 'limit: Cursor "monthly cycle ends on 12/1/2026"');
+  const spend = limitReset("You've hit your org's monthly spend limit · run /usage-credits", NOW);
+  assert(spend && spend.at === null, 'limit: a limit message without a reset time closes with no time');
+  assert(limitReset('Simulated Claude failure: the build exploded.', NOW) === null && limitReset('', NOW) === null, 'limit: other errors are not limits');
+}
 
 (async () => {
   let srv = startServer({ HARNESS_MODE: 'cursor', HARNESS_PARTIAL: process.env.HARNESS_PARTIAL || '' });
@@ -233,6 +247,19 @@ const waitFor = async (fn, ms = 15000) => { const t = Date.now(); while (Date.no
     assert(said.includes(`(fake claude) ${allow ? 'approved' : 'rejected'}: rm -rf dist`) && said.includes(`${allow ? 'Approved' : 'Rejected'}: Bash`), `approval: ${allow ? '"Yes, chef"' : '"No, chef"'} reaches the CLI and the chat`);
     assert(lastAgent(ids.Cla.id).ask === null, 'approval: the raised plate comes down after the answer');
   }
+
+  // plan limit: the CLI's limit message closes the kitchen for every agent of that type until a run goes through
+  await sleep(1500);
+  mark = log.length;
+  ws.send(JSON.stringify({ type: 'send', id: ids.Cla.id, text: 'limit check' }));
+  const lim = (await waitFor(() => log.slice(mark).find((m) => m.type === 'agent' && m.agent.id === ids.Cla.id && m.agent.limit), 10000)).agent.limit;
+  assert(lim.at === limitReset("You've hit your session limit · resets 11:30pm (UTC)").at, 'limit: a Claude limit result sets limit.at on the agent');
+  assert(!lastAgent(ids.Cur.id).limit, 'limit: other agent types stay open');
+  await waitFor(() => lastAgent(ids.Cla.id).state === 'error', 5000);
+  await sleep(1700);
+  ws.send(JSON.stringify({ type: 'send', id: ids.Cla.id, text: 'hello again' }));
+  await waitFor(() => log.slice(mark).some((m) => m.type === 'agent' && m.agent.id === ids.Cla.id && m.agent.state === 'done'), 15000);
+  assert(lastAgent(ids.Cla.id).limit === null, 'limit: a run that goes through lifts it');
 
   // agent-to-agent message
   mark = log.length;
