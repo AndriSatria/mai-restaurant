@@ -42,6 +42,7 @@ Every message you send runs the real CLI in print mode (`claude -p` or `agent -p
 | Click a cook | They look up at you. By keyboard, Tab past the top buttons to a list of cooks and press Enter. |
 | A run fails | The cook's stock pot boils over for a few seconds. |
 | A shell command fails | A small fire flares up on the stove. |
+| A run finishes | The runner takes the plate from the pass to that project's table in the dining room. Each project folder gets a table and a diner, up to 6. |
 
 The first person you hire stands at the pass as head chef (tall toque). Up to 7 people fit in the kitchen: 6 cook stations and the pass.
 

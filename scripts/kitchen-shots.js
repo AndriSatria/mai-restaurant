@@ -10,6 +10,7 @@
 //   kitchen-08-approvals.png a line cook and the head chef hold plates up at the pass, "Yes, chef" / "No, chef" in the side panel
 //   kitchen-09-resting.png   every plan ran out: the cooks rest at the staff table under the "Back at HH:MM" board
 //   kitchen-10-reactions.png a failed run boils a pot over, failed shell commands set the grill and stove on fire, a clicked cook looks up
+//   kitchen-11-dining.png    dining room: a diner per project eats at their table while the runner carries the next plate from the pass
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -25,6 +26,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const teamShots = require('./team-shots');
 const { makeFakeClaudeDir } = require('./fake-claude-dir');
 const FAKE = makeFakeClaudeDir();
+// two more projects so the dining room has three tables
+const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d = path.join(os.tmpdir(), 'mai-restaurant-shots', n); fs.mkdirSync(d, { recursive: true }); return [n, d]; }));
 
 (async () => {
   const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore', env: { ...process.env, PORT, HARNESS_MODE: 'mock', HARNESS_DATA: DATA, HARNESS_DEFAULT_CWD: ROOT,
@@ -47,8 +50,8 @@ const FAKE = makeFakeClaudeDir();
   try {
     await page.goto(`http://localhost:${PORT}/?wander=off`);
     await page.waitForSelector('#conn.on');
-    for (const [name, type] of [['Ada', 'mock'], ['Linus', 'cursor'], ['Grace', 'claude'], ['Ken', 'mock'], ['Alan', 'mock'], ['Margaret', 'mock'], ['Barbara', 'mock']]) {
-      await page.evaluate(([n, t, cwd]) => window.harness.send({ type: 'hire', name: n, cwd, agentType: t }), [name, type, ROOT]);
+    for (const [name, type, cwd] of [['Ada', 'mock', ROOT], ['Linus', 'cursor', ROOT], ['Grace', 'claude', ROOT], ['Ken', 'mock', PROJ['bistro-api']], ['Alan', 'mock', PROJ['bistro-api']], ['Margaret', 'mock', PROJ['menu-site']], ['Barbara', 'mock', PROJ['menu-site']]]) {
+      await page.evaluate(([n, t, cwd]) => window.harness.send({ type: 'hire', name: n, cwd, agentType: t }), [name, type, cwd]);
       await page.waitForFunction((n) => window.harness.states().some((a) => a.name === n), name);
       await sleep(150);
     }
@@ -111,7 +114,7 @@ const FAKE = makeFakeClaudeDir();
     const clip = await page.evaluate(() => {
       const O = window.Office, b = document.getElementById('office').getBoundingClientRect(), k = b.width / O.W;
       const pts = [];
-      for (const [x, y, z] of [[6.0, -0.15, 56], [9.4, -0.15, 56], [12.0, 0, 56], [5.8, 2.5, 0], [9.5, 2.6, 0], [11.9, 2.2, 0], [8.5, 1.5, 0], [8.9, 2.25, 0]]) pts.push(O.project(x, y, z));
+      for (const [x, y, z] of [[6.0, -0.15, 56], [9.4, -0.15, 56], [12.0, 0, 56], [5.8, 2.5, 0], [9.5, 2.6, 0], [11.9, 2.2, 0], [8.5, 1.5, 0], [8.9, 2.25, 0], [14.6, 1.9, 0]]) pts.push(O.project(x, y, z));
       const left = Math.min(...pts.map((p) => p[0])) - 4, right = Math.max(...pts.map((p) => p[0])) + 6;
       const top = Math.min(...pts.map((p) => p[1])) - 2, bot = Math.max(...pts.map((p) => p[1])) + 22;
       return { x: b.x + left * k, y: b.y + top * k, width: (right - left) * k, height: (bot - top) * k };
@@ -229,6 +232,19 @@ const FAKE = makeFakeClaudeDir();
     await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
     await sleep(300);
     await shot('kitchen-10-reactions.png');
+
+    // 11: dining room: Margaret's dish is on the menu-site table, the runner carries Ken's to bistro-api
+    await page.evaluate(() => window.harness.select(null));
+    await idle(40000).catch(() => {});
+    await page.waitForFunction(() => !window.harness.dining().runner, null, { timeout: 60000 });
+    await sendTo('Margaret', 'hello');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => window.harness.dining().tables.some((t) => t.name === 'menu-site' && t.served != null && t.served < 3), null, { timeout: 60000 });
+    await sendTo('Ken', 'hello');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => { const r = window.harness.dining().runner; return r && r.carry && r.x > 13.2; }, null, { timeout: 60000 });
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
+    await shot('kitchen-11-dining.png');
   } finally {
     await browser.close(); srv.kill();
   }

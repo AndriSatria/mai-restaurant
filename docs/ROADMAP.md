@@ -6,4 +6,4 @@
 - [x] 4. Approvals at the pass
 - [x] 5. Resting and out-of-limit states
 - [x] 6. Small reactions
-- [ ] 7. Dining room view
+- [x] 7. Dining room view

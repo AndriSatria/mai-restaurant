@@ -68,6 +68,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
       fp.push(['manager desk', O.MD.x0, O.MD.y0, O.MD.x1, O.MD.y1], ['manager stand', O.SLOTS[O.MGR].seat.x - 0.45, 1.1, O.SLOTS[O.MGR].seat.x + 0.45, 1.95]);
       fp.push(['cafe counter', O.COUNTER.x0, O.COUNTER.y0, O.COUNTER.x1, O.COUNTER.y1], ['round table', T.x - R, T.y - R, T.x + R, T.y + R]);
       for (const p of O.PLANTS) fp.push(['plant', p.x + 0.1, p.y + 0.1, p.x + 0.9, p.y + 0.9]);
+      O.TABLES.forEach((tb, k) => fp.push(['dining table ' + k, tb.x - 0.35, tb.y - 0.35, tb.x + 0.35, tb.y + 0.35], ['diner ' + k, tb.diner.x - 0.22, tb.diner.y - 0.32, tb.diner.x + 0.22, tb.diner.y + 0.12]));
       const hits = [];
       for (let i = 0; i < fp.length; i++) for (let j = i + 1; j < fp.length; j++) {
         const a = fp[i], b = fp[j];
@@ -466,6 +467,26 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     await page.evaluate((id) => window.harness.send({ type: 'send', id, text: 'please fail' }), burnId);
     await page.waitForFunction((id) => window.harness.agents.get(id).errAt > 0, burnId, { timeout: 20000 });
     assert(true, 'a failed run boils the pot over');
+
+    // ---- dining room: one table per project, the runner carries a finished task from the pass to that project's table ----
+    const trip = await page.evaluate(() => {
+      const O = window.Office, bad = [];
+      O.TABLES.forEach((tb, k) => {
+        let carried = false, served = false, r;
+        for (let e = 0; (r = O.runnerAt(k, e)); e += 0.05) {
+          if (O.isBlocked(Math.floor(r.x), Math.floor(r.y))) bad.push(['blocked', k, r.x.toFixed(2), r.y.toFixed(2)]);
+          if (r.carry && served) bad.push(['carries after serving', k]);
+          carried = carried || r.carry; served = served || r.served;
+        }
+        if (!carried || !served) bad.push(['no delivery', k]);
+      });
+      return bad.slice(0, 5);
+    });
+    assert(!trip.length, 'runner trips to every table stay on free floor and carry the plate until it is set down ' + JSON.stringify(trip));
+    await page.evaluate((id) => window.harness.send({ type: 'send', id, text: 'hello' }), burnId);
+    await page.waitForFunction(() => { const d = window.harness.dining(), t = d.tables.find((x) => x.name === 'tmp'); return t && t.served != null && t.served < 2; }, null, { timeout: 40000 });
+    const din = await page.evaluate(() => ({ names: window.harness.dining().tables.map((t) => t.name), cwds: new Set([...window.harness.agents.values()].map((a) => a.cwd)).size }));
+    assert(din.names.length === din.cwds && new Set(din.names).size === din.cwds, `one dining table per project (${din.names.join(', ')}), and Linus's finished task reached the /tmp table`);
 
     // ---- chat panel: Claude Code style formatting stays safe (model text is never parsed as HTML) ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);

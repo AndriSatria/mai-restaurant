@@ -13,7 +13,7 @@
   const F = window.OfficeFlat;
   const { R, shade, rnd, disc, line, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL } = F.shared;
 
-  const W = 400, H = 264, OX = 200, OY = 62, GX = 12, GY = 12, WH = 56;
+  const W = 464, H = 264, OX = 200, OY = 62, GX = 16, GY = 12, WH = 56;   // kitchen floor is x 0..12; x 12..16 is the dining room
   const SEAT = 8, DESKZ = 13, MAX_SLOTS = 7, MGR = 6, SPEED = 2.6; // SPEED in tiles/second; slot 6 = the pass (head chef)
   const AISLE = 3.55, FRONT1 = 6.55;      // desk-to-desk dotted lanes: the aisle between the rows / the strip in front of row 1
   const sx = (x, y) => OX + Math.round((x - y) * 16);
@@ -74,6 +74,14 @@
   for (const st of SEATS) block(st.x - 0.1, st.y - 0.1, st.x + 0.1, st.y + 0.1);   // standing marks (walkable only as a destination)
   block(COUNTER.x0, COUNTER.y0, COUNTER.x1, COUNTER.y1);
   for (const p of PLANTS) block(p.x, p.y, p.x + 1, p.y + 1);
+  // dining room east of the pass: one table per project, the diner behind it, the runner serves from the table's -x side
+  const DIN = { x0: 12, x1: 16, y1: 8 };
+  for (let y = DIN.y1; y < GY; y++) block(DIN.x0, y, DIN.x1, y + 1);   // no floor in front of the dining room
+  const TABLES = [[13, 1], [15, 1], [13, 4], [15, 4], [13, 7], [15, 7]].map(([tx, ty]) => {
+    block(tx, ty - 1, tx + 1, ty + 1);
+    return { x: tx + 0.5, y: ty + 0.5, diner: { x: tx + 0.5, y: ty - 0.05 }, spot: { x: tx - 0.5, y: ty + 0.5, face: 0 } };
+  });
+  const PICKUP = { x: 9.5, y: 0.5, face: 2 }, RHOME = { x: 12.5, y: 2.5, face: 1 };   // the runner takes plates off the east end of the pass
   const isBlocked = (tx, ty) => tx < 0 || ty < 0 || tx >= GX || ty >= GY || blocked[ty][tx];
 
   /** Tile-grid path (4-neighbour BFS, so it never cuts through furniture) from a desk to a spot.
@@ -219,14 +227,22 @@
   function buildBackground() {
     const bg = mk(W, H), c = bg.getContext('2d');
     // floor slab edges
-    poly(c, [A(12, 0, 0), A(12, 12, 0), A(12, 12, -7), A(12, 0, -7)], '#7a3a28');
+    poly(c, [A(12, DIN.y1, 0), A(12, 12, 0), A(12, 12, -7), A(12, DIN.y1, -7)], '#7a3a28');
     poly(c, [A(0, 12, 0), A(12, 12, 0), A(12, 12, -7), A(0, 12, -7)], '#964832');
     // quarry-tile floor (warm kitchen clay, two shades)
-    for (let j = 0; j < GY; j++) for (let i = 0; i < GX; i++) poly(c, [A(i, j), A(i + 1, j), A(i + 1, j + 1), A(i, j + 1)], (i + j) % 2 ? '#c86a42' : '#b85c38');
-    for (let i = 0; i <= GX; i++) { const a = A(i, 0), b = A(i, GY); line(c, a[0], a[1], b[0], b[1], 'rgba(70,28,16,.28)', 1); }
-    for (let j = 0; j <= GY; j++) { const a = A(0, j), b = A(GX, j); line(c, a[0], a[1], b[0], b[1], 'rgba(70,28,16,.28)', 1); }
-    let a = A(0, 12), b = A(12, 12), d = A(12, 0);
+    for (let j = 0; j < GY; j++) for (let i = 0; i < 12; i++) poly(c, [A(i, j), A(i + 1, j), A(i + 1, j + 1), A(i, j + 1)], (i + j) % 2 ? '#c86a42' : '#b85c38');
+    for (let i = 0; i <= 12; i++) { const a = A(i, 0), b = A(i, GY); line(c, a[0], a[1], b[0], b[1], 'rgba(70,28,16,.28)', 1); }
+    for (let j = 0; j <= GY; j++) { const a = A(0, j), b = A(12, j); line(c, a[0], a[1], b[0], b[1], 'rgba(70,28,16,.28)', 1); }
+    let a = A(0, 12), b = A(12, 12), d = A(12, DIN.y1);
     line(c, a[0], a[1], b[0], b[1], '#d4885c', 1); line(c, b[0], b[1], d[0], d[1], '#a85838', 1);
+    // dining room: oak boards running along x, its own slab edges, a brass strip at the kitchen threshold
+    poly(c, [A(DIN.x1, 0, 0), A(DIN.x1, DIN.y1, 0), A(DIN.x1, DIN.y1, -7), A(DIN.x1, 0, -7)], '#5a3a22');
+    poly(c, [A(DIN.x0, DIN.y1, 0), A(DIN.x1, DIN.y1, 0), A(DIN.x1, DIN.y1, -7), A(DIN.x0, DIN.y1, -7)], '#74492a');
+    for (let j = 0; j < DIN.y1 * 2; j++) poly(c, [A(DIN.x0, j / 2), A(DIN.x1, j / 2), A(DIN.x1, (j + 1) / 2), A(DIN.x0, (j + 1) / 2)], j % 2 ? '#a8703e' : '#9a6436');
+    for (let j = 0; j < DIN.y1 * 2; j++) { const k = DIN.x0 + ((j * 1.7) % 4), a = A(k, j / 2), b = A(k, (j + 1) / 2); line(c, a[0], a[1], b[0], b[1], 'rgba(60,30,12,.35)', 1); }
+    a = A(DIN.x0, DIN.y1); b = A(DIN.x1, DIN.y1); d = A(DIN.x1, 0);
+    line(c, a[0], a[1], b[0], b[1], '#c48a52', 1); line(c, b[0], b[1], d[0], d[1], '#7a4a28', 1);
+    a = A(DIN.x0, 0); b = A(DIN.x0, DIN.y1); line(c, a[0], a[1], b[0], b[1], '#caa24a', 1);
 
     // floor shadows under the two counter runs, plus a rubber mat at each standing post
     for (const dx of [2, 5]) poly(c, [A(dx, 1.05), A(dx + 1.35, 1.05), A(dx + 1.35, 9.15), A(dx, 9.15)], 'rgba(40,16,8,.2)');
@@ -275,6 +291,11 @@
     box(c, 0, -0.25, 12, 0, WH - 3, WH, trim);
     box(c, -0.25, 0, 0, 12, WH - 3, WH, trim);
     box(c, -0.25, -0.25, 0, 0, WH - 3, WH, trim);
+    // dining room wall: cream plaster over a wood wainscot, one window
+    pr(c, ...RW, 192, 256, 0, WH, '#e9dcc0'); pr(c, ...RW, 192, 256, 0, 22, '#6b4226'); pr(c, ...RW, 192, 256, 20, 22, '#8a5a34'); pr(c, ...RW, 192, 256, 0, 3, '#3a2414');
+    for (let k = 196; k < 252; k += 14) pr(c, ...RW, k, k + 10, 6, 17, '#5a3620');
+    box(c, 12, -0.25, 16, 0, WH - 3, WH, trim);
+    window3(c, ...RW, 211, 26, 26, 20);
     // windows (smaller, tiled frames)
     window3(c, ...RW, 16, 26, 26, 20); window3(c, ...RW, 50, 26, 26, 20);
     window3(c, ...LW, 16, 26, 26, 20);
@@ -658,7 +679,7 @@
         case 'cap': R(c, -5, hy - 2, 11, 4, look.shirt); R(c, -4, hy - 2, 4, 1, shade(look.shirt, 40)); R(c, 3, hy + 1, 6, 2, shade(look.shirt, -35)); R(c, -5, hy + 2, 3, 5, hair); break;
         default: R(c, -5, hy - 1, 11, 3, hair); R(c, -5, hy + 2, 3, 6, hair); R(c, 4, hy + 2, 1, 2, hair); R(c, -3, hy - 1, 4, 1, hairL); R(c, 0, hy + 2, 4, 1, hair);
       }
-      chefHat(c, hy, o.hat === 'toque');
+      if (o.hat) chefHat(c, hy, o.hat === 'toque');
     } else { // back of the head
       const bot = st === 'long' ? 13 : 9;
       R(c, -5, hy - 1, 11, bot + 1, hair); R(c, -3, hy, 3, 1, hairL); R(c, -5, hy + bot - 1, 11, 1, hairD);
@@ -666,7 +687,7 @@
       if (st === 'bun') { R(c, -2, hy - 4, 4, 3, hair); R(c, -1, hy - 4, 2, 1, hairL); }
       if (st === 'cap') { R(c, -5, hy - 2, 11, 5, look.shirt); R(c, -4, hy - 2, 4, 1, shade(look.shirt, 40)); R(c, -5, hy + 3, 11, 1, shade(look.shirt, -35)); }
       R(c, 5, hy + 4, 1, 2, skin);
-      chefHat(c, hy, o.hat === 'toque');
+      if (o.hat) chefHat(c, hy, o.hat === 'toque');
     }
   }
 
@@ -957,6 +978,76 @@
     }
   }
 
+  // ---------- dining room ----------
+  const DINER = { skin: ['#f1c9a0', '#e0a97a', '#c68b5c', '#8d5a3b', '#f6d6b8'], hair: ['#2b1d14', '#6b3f1d', '#d9a441', '#1c1c24', '#a23b2a', '#8a8f98'],
+    shirt: ['#3e8ef7', '#e93d82', '#12a594', '#f5a524', '#8e4ec6', '#e5484d'], style: ['short', 'long', 'spiky', 'bun', 'cap'] };
+  const RUNNER = { shirt: '#2a2e36', pants: '#1c1c24', skin: '#e0a97a', hair: '#2b1d14', hairStyle: 'short' };
+  const WOOD = { top: '#8a5a34', se: '#4a2c18', sw: '#6b4226' }, CLOTH = { top: '#3e7a56', se: '#1f4a32', sw: '#2f6444', hi: '#6aa882' };
+  const EAT = 20;   // seconds a served plate stays on the table
+  function dinerLook(name) {   // same project, same diner
+    let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const p = (arr, k) => arr[Math.floor(rnd(h % 9973 + k) * arr.length)];
+    return { skin: p(DINER.skin, 1), hair: p(DINER.hair, 2), shirt: p(DINER.shirt, 3), hairStyle: p(DINER.style, 4), pants: '#2f3b52' };
+  }
+  function drawDiner(c, look, t, ph, eating) {
+    const sh = look.shirt, bite = eating && Math.floor(t * 2.5 + ph * 5) % 3 === 0;
+    R(c, -4, -10, 9, 3, look.pants);
+    R(c, -4, -20, 9, 11, sh); R(c, -4, -20, 9, 1, shade(sh, 30)); R(c, 3, -20, 2, 11, shade(sh, -25));
+    R(c, -1, -21, 3, 2, look.skin);
+    head(c, look, -30, true, { mood: eating ? 'happy' : 'normal', blink: ((t * 1000 + ph * 3600) % 3600) < 140 });
+    R(c, -6, -18, 2, 7, sh); R(c, -6, -11, 2, 2, look.skin);
+    if (bite) { R(c, 5, -22, 2, 4, sh); R(c, 4, -24, 2, 2, look.skin); R(c, 5, -27, 1, 3, '#c8ccd4'); }
+    else { R(c, 5, -18, 2, 7, sh); R(c, 5, -11, 2, 2, look.skin); }
+  }
+  function renderDiner(c, tb, look, t, ph, eating) {
+    const d = tb.diner;
+    box(c, d.x - 0.2, d.y - 0.32, d.x + 0.2, d.y - 0.22, 0, 24, WOOD);
+    box(c, d.x - 0.2, d.y - 0.22, d.x + 0.2, d.y + 0.12, 7, 9, WOOD);
+    sc.setTransform(1, 0, 0, 1, 0, 0); sc.clearRect(0, 0, 80, 80); sc.setTransform(1, 0, 0, 1, ORX, ORY);
+    drawDiner(sc, look, t, ph, eating);
+    sc.setTransform(1, 0, 0, 1, 0, 0);
+    blit(c, sx(d.x, d.y), sy(d.x, d.y, 0), true);
+  }
+  function drawDinTable(c, tb, served) {
+    const { x, y } = tb;
+    box(c, x - 0.22, y - 0.22, x + 0.22, y + 0.22, 0, 1, WOOD);
+    box(c, x - 0.06, y - 0.06, x + 0.06, y + 0.06, 1, 8, WOOD);
+    box(c, x - 0.35, y - 0.35, x + 0.35, y + 0.35, 8, 12, CLOTH);
+    const g = A(x + 0.22, y - 0.2, 12); R(c, g[0] - 1, g[1] - 4, 2, 4, '#cfe8f4');
+    if (served != null && served < EAT) {
+      const p = A(x, y - 0.12, 12);
+      disc(c, p[0], p[1], 4, '#f0eee8'); disc(c, p[0], p[1], 3, '#fff');
+      if (served < EAT * 0.7) disc(c, p[0], p[1] - 1, 2, '#c84830');
+    }
+  }
+  /** where the runner is e seconds into a delivery to table k (home -> pass -> table -> home); null once back home */
+  function runnerAt(k, e) {
+    const tb = TABLES[k];
+    tb.legs = tb.legs || [[RHOME, PICKUP, 0.6], [PICKUP, tb.spot, 1.5], [tb.spot, RHOME, 0]].map(([a, b, hold]) => ({ pts: walkBetween(a, b), hold, face: b.face }));
+    for (let i = 0; i < 3; i++) {
+      const { pts, hold, face } = tb.legs[i];
+      for (let j = 1; j < pts.length; j++) {
+        const p = pts[j - 1], q = pts[j], d = Math.hypot(q.x - p.x, q.y - p.y) / SPEED;
+        if (e < d) { const f = e / d; return { x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f, face: faceToward(p.x, p.y, q.x, q.y), walk: true, carry: i === 1, served: i === 2 }; }
+        e -= d;
+      }
+      const end = pts[pts.length - 1];
+      if (e < hold) return { x: end.x, y: end.y, face, walk: false, carry: false, served: i === 1 };
+      e -= hold;
+    }
+    return null;
+  }
+  function diningObjects(objs, dining, t) {
+    dining.tables.forEach((d, k) => {
+      const tb = TABLES[k], dn = tb.diner, look = dinerLook(d.name), eating = d.served != null && d.served < EAT;
+      objs.push({ x0: dn.x - 0.22, y0: dn.y - 0.32, x1: dn.x + 0.22, y1: dn.y + 0.12, h: 34, pad: 8, ord: 1, tag: 'diner' + k, draw: (c) => renderDiner(c, tb, look, t, k * 0.37, eating), hit: null });
+      objs.push({ x0: tb.x - 0.35, y0: tb.y - 0.35, x1: tb.x + 0.35, y1: tb.y + 0.35, h: 12, pad: 2, ord: 0, tag: 'dtable' + k, draw: (c) => drawDinTable(c, tb, d.served), hit: null });
+    });
+    const r = dining.runner || RHOME;
+    const e = { id: 'runner', look: RUNNER, x: r.x, y: r.y, face: r.face, away: true, mode: r.walk ? 'walk' : 'sit', carry: r.carry ? 'ok' : null, phase: 0.5, state: 'idle', slot: -1 };
+    objs.push({ x0: r.x - 0.22, y0: r.y - 0.22, x1: r.x + 0.22, y1: r.y + 0.22, h: 38, pad: 10, ord: 1, tag: 'runner', draw: (c) => renderPerson(c, e, t, false), hit: null });
+  }
+
   // ---------- scene: objects, depth sorting ----------
   function drawTable(c, t, plan) {
     const { x, y, r } = TABLE, N = 40, rim = (z, rr) => Array.from({ length: N }, (_, k) => A(x + rr * Math.cos((k / N) * Math.PI * 2), y + rr * Math.sin((k / N) * Math.PI * 2), z));
@@ -979,7 +1070,7 @@
     R(c, sp[0] - 1, sp[1] + 2, 2, 1, plan ? (plan.state === 'ready' ? '#6be39b' : '#ffd84a') : '#c9a26b');
   }
 
-  function buildObjects(entries, t, plan) {
+  function buildObjects(entries, t, plan, dining) {
     const bySlot = {}; entries.forEach((e) => { bySlot[e.slot] = e; });
     const fires = new Set(entries.filter((e) => e.fire).map((e) => (HEAT[SETS[e.slot]] ? e.slot : SETS.indexOf('stove'))));   // cold stations and the pass use the stove
     const objs = [];
@@ -1005,6 +1096,7 @@
       objs.push({ x0: x - 0.22, y0: y - 0.22, x1: x + 0.22, y1: y + 0.22, h: top, pad: 10, ord: 1, tag: 'person:' + e.id, draw: (c) => renderPerson(c, e, t, atPost),
         hit: (lx, ly) => lx >= ax - 8 && lx <= ax + 8 && ly >= ay - top && ly <= ay + 3, res: { id: e.id }, person: true });
     }
+    if (dining) diningObjects(objs, dining, t);
     return objs;
   }
   /** Footprint-aware painter's algorithm: A is drawn before B if A lies entirely behind B along x or y. */
@@ -1151,7 +1243,7 @@
       lc.globalAlpha = 0.6 * (1 - p / 12); R(lc, bx + Math.sin(t * 2 + i * 2) * 1.5 - 1 + i * 2, by - p, 2, 2, '#fff');
     }
     lc.globalAlpha = 1;
-    for (const o of sortObjs(buildObjects(entries, t, plan))) o.draw(lc);
+    for (const o of sortObjs(buildObjects(entries, t, plan, scene.dining))) o.draw(lc);
     // state icons, role badges, talk bubbles sit above everything
     for (const e of entries) {
       const p = personAnchor(e), h = e.help;
@@ -1234,6 +1326,7 @@
       if (e.queued) pillText(ctx, '+' + e.queued + ' queued', labX * S, (lp[1] + (e.help && !e.away && e.help.desk ? 21 : 11)) * S, U * 0.85, '#14151f', '#f5c542', true);
       // (speech bubbles are drawn after the loop so overlapping ones can be stacked)
     }
+    if (scene.dining) scene.dining.tables.forEach((d, k) => { const tb = TABLES[k]; pillText(ctx, d.name, sx(tb.x + 0.35, tb.y + 0.35) * S, sy(tb.x + 0.35, tb.y + 0.35, 0) * S, U * 0.8, '#f4f1e8', 'rgba(58,36,20,.9)', true); });
     const bubs = [];
     for (const e of entries) { const bub = e.help && e.help.say ? e.help.say : e.bubble; if (bub) bubs.push({ e, bub, p: personAnchor(e), w: Math.min(Math.max(120 * U, 46 * S) + 12 * U, bub.length * 6.6 * U + 14 * U) }); }
     if (plan) {
@@ -1303,7 +1396,7 @@
     W, H, SLOTS, MAX_SLOTS, render, hitTest, ticketHits: () => lastTicketHits, walkPath, SPOTS, SPEED, STEP: 1,
     drawAvatar: F.drawAvatar, GX, GY, isBlocked, project: (x, y, z) => [sx(x, y), sy(x, y, z || 0)],
     deskPoint: (slot) => { const s = SLOTS[slot]; return [sx(s.desk.x, s.desk.y), sy(s.desk.x, s.desk.y, DESKZ)]; },
-    TABLE, SEATS, MGR, MD, COUNTER, PLANTS, SETS, HEAT, stationSet, tablePoint: () => [sx(TABLE.x, TABLE.y), sy(TABLE.x, TABLE.y, TABLE.h)],
+    TABLES, runnerAt, TABLE, SEATS, MGR, MD, COUNTER, PLANTS, SETS, HEAT, stationSet, tablePoint: () => [sx(TABLE.x, TABLE.y), sy(TABLE.x, TABLE.y, TABLE.h)],
     labelPoint: labelPt,
     deskRoute, kindCol, roleCol, roleBadge, ROLE_COL, walkBetween,
     drawOrder: (entries) => sortObjs(buildObjects(entries, 0, null)).map((o) => o.tag || 'other'),   // for tests

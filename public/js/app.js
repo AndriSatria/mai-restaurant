@@ -83,6 +83,7 @@
           Object.assign(a, agent); slotMoved(a, prevSlot);
           if (prev !== a.state && a.state === 'thinking') a.bubble = null;
           if (prev !== a.state && a.state === 'error') a.errAt = performance.now();   // the pot boils over
+          if (prev !== a.state && a.state === 'done' && !orders.includes(a.cwd)) orders.push(a.cwd);   // one queued plate per table, so a busy kitchen builds no backlog
           syncHelp(a, false);
         }
         if (a.id === selectedId) updateHead();
@@ -511,6 +512,23 @@
     return d.toDateString() === new Date().toDateString() ? 'Back at ' + hm : 'Back ' + d.toLocaleDateString('en', { month: 'short', day: 'numeric' }) + ', ' + hm;
   }
   const planView = () => { const o = planOwner(); return o ? { state: o.plan.state, summary: o.plan.summary || '', ownerId: o.id } : null; };
+  // dining room: one table per project (agent cwd, in station order); the runner serves each finished task to its table
+  const orders = [], servedAt = new Map();
+  let run = null;
+  const projects = () => [...new Set([...agents.values()].sort((p, q) => p.slot - q.slot).map((a) => a.cwd))].slice(0, Office.TABLES.length);   // shortcut: projects past the sixth get no table, add tables if that happens
+  function diningView(now) {
+    if (!Office.runnerAt) return null;
+    const list = projects();
+    while (!run && orders.length) { const cwd = orders.shift(), k = list.indexOf(cwd); if (k >= 0) run = { cwd, k, t0: now }; }
+    let runner = null;
+    if (run) {
+      runner = Office.runnerAt(run.k, (now - run.t0) / 1000 / TS);
+      if (!runner) run = null;
+      else if (runner.served && !run.served) { run.served = true; servedAt.set(run.cwd, now); }
+    }
+    return { tables: list.map((cwd) => ({ name: String(cwd).split(/[\\/]/).filter(Boolean).pop() || String(cwd), served: servedAt.has(cwd) ? (now - servedAt.get(cwd)) / 1000 / TS : null })), runner };
+  }
+  let lastDining = null;
   const flightsView = (now) => flights.map((f) => ({ kind: f.kind, pid: f.pid, hid: f.hid, toId: f.toId, ok: f.ok, p: (now - f.t0) / f.dur }));
 
   // ---------- helpers (subagents) = EXISTING colleagues working as kitchen hands ----------
@@ -954,7 +972,7 @@
     update(dt, now); updateHelp(now); renderAsks(); renderCookKeys();
     const closed = closedView();
     if (closed !== closedSaid) { closedSaid = closed; $('closedNote').textContent = closed ? `Kitchen closed, the plan limit ran out. ${closed}.` : ''; }
-    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now), closed });
+    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now), closed, dining: (lastDining = diningView(now)) });
     requestAnimationFrame(frame);
   }
 
@@ -964,6 +982,7 @@
     plan: () => { const o = planOwner(); return { owner: o ? o.id : null, state: o ? o.plan.state : null, summary: o ? o.plan.summary : null, seated: [...agents.values()].filter((a) => a.away && a.mode === 'meet').map((a) => a.id), walking: [...agents.values()].filter((a) => a.away && a.dest === 'meet' && a.mode === 'walk').map((a) => a.id) }; },
     toolTrip,
     tickets: () => collectTickets(performance.now()),
+    dining: () => lastDining,
     ticketHits: () => (Office.ticketHits && Office.ticketHits()) || [],
     states: () => [...agents.values()].map((a) => ({ id: a.id, main: !!a.main, slot: a.slot, meet: a.away && a.mode === 'meet', dest: a.dest, name: a.name, type: a.type, state: a.state, tool: a.tool, x: a.x, y: a.y, away: a.away, mode: a.mode, act: a.act && a.act.kind, cook: a.cook || null, ask: a.ask ? a.ask.reqId : null, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1), subs: (a.subs || []).length, helping: a.help ? a.help.phase : null, home: !a.away, seated: !a.away && a.mode === 'sit' })),
     help: (id) => { const a = agents.get(id); return a && a.help ? { phase: a.help.phase, parentId: a.help.parentId, role: a.help.role, label: a.help.label, tool: a.help.tool, say: a.help.say, x: a.x, y: a.y, mode: a.mode, away: a.away, seated: !a.away && a.mode === 'sit', peer: !!a.help.peer, tile: Math.floor(a.x) + ',' + Math.floor(a.y) } : null; },
