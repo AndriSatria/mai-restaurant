@@ -11,6 +11,9 @@
 //   kitchen-09-resting.png   every plan ran out: the cooks rest at the staff table under the "Back at HH:MM" board
 //   kitchen-10-reactions.png a failed run boils a pot over, failed shell commands set the grill and stove on fire, a clicked cook looks up
 //   kitchen-11-dining.png    dining room: a diner per project eats at their table while the runner carries the next plate from the pass
+//   kitchen-12-flat-dining.png  the same dining room in the flat (?view=flat) view
+//   kitchen-13-seven-tables.png seven projects: the seventh table wraps into a fourth row
+//   kitchen-14-hands-to-lead.png kitchen hands' dishes go to the lead's table while the lead is still working
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -188,6 +191,8 @@ const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d
     }, null, { timeout: 60000 });
     await sleep(300);
     await shot('kitchen-07-hands.png');
+    await page.waitForFunction(() => { const r = window.harness.dining().runner, ada = [...window.harness.agents.values()].find((a) => a.name === 'Ada'); return r && r.carry && r.x > 11.5 && (ada.state !== 'done' || window.harness.states().some((x) => x.helping)); }, null, { timeout: 60000 });
+    await shot('kitchen-14-hands-to-lead.png');
 
     // 08: approvals at the pass
     await page.evaluate(() => { for (const a of window.harness.agents.values()) window.harness.send({ type: 'interrupt', id: a.id }); });
@@ -245,6 +250,40 @@ const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d
     await page.waitForFunction(() => { const r = window.harness.dining().runner; return r && r.carry && r.x > 13.2; }, null, { timeout: 60000 });
     await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
     await shot('kitchen-11-dining.png');
+
+    // 12: flat view: Margaret's plate is on the menu-site table, the runner carries Ken's
+    await page.goto(`http://localhost:${PORT}/?wander=off&view=flat`);
+    await page.waitForSelector('#conn.on');
+    await idle(40000).catch(() => {});
+    await sendTo('Margaret', 'hello');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => window.harness.dining().tables.some((t) => t.name === 'menu-site' && t.served != null && t.served < 3), null, { timeout: 60000 });
+    await sendTo('Ken', 'hello');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => { const r = window.harness.dining().runner; return r && r.carry && r.y < 150; }, null, { timeout: 60000 });
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
+    await shot('kitchen-12-flat-dining.png');
+
+    // 13: seven cooks on seven projects: the seventh table goes into a fourth row
+    await page.goto(`http://localhost:${PORT}/?wander=off`);
+    await page.waitForSelector('#conn.on');
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) window.harness.send({ type: 'fire', id: a.id }); });
+    await page.waitForFunction(() => window.harness.agents.size === 0);
+    const seven = [['Ada', ROOT], ['Linus', PROJ['bistro-api']], ['Grace', PROJ['menu-site']], ...['pos-terminal', 'booking-app', 'pantry-sync', 'loyalty-cards'].map((n, i) => [['Ken', 'Alan', 'Margaret', 'Barbara'][i], path.join(os.tmpdir(), 'mai-restaurant-shots', n)])];
+    for (const [name, cwd] of seven) {
+      fs.mkdirSync(cwd, { recursive: true });
+      await page.evaluate(([n, c]) => window.harness.send({ type: 'hire', name: n, cwd: c, agentType: 'mock' }), [name, cwd]);
+      await page.waitForFunction((n) => window.harness.states().some((a) => a.name === n), name);
+      await sleep(150);
+    }
+    await page.evaluate(() => window.harness.select(null));
+    for (const id of await page.evaluate(() => [...window.harness.agents.values()].sort((p, q) => p.slot - q.slot).map((a) => a.id))) {   // table order, so the fourth-row plate goes out last
+      await page.evaluate((i) => window.harness.send({ type: 'send', id: i, text: 'hello' }), id);
+      await sleep(1500);
+    }
+    await page.waitForFunction(() => { const d = window.harness.dining(); return d.tables.length === 7 && d.tables.filter((t) => t.served != null).length >= 4 && d.runner && d.runner.carry && d.runner.x > 12.2 && d.runner.y > 9; }, null, { timeout: 120000 });
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
+    await shot('kitchen-13-seven-tables.png');
   } finally {
     await browser.close(); srv.kill();
   }

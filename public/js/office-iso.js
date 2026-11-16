@@ -11,9 +11,9 @@
 (function () {
   'use strict';
   const F = window.OfficeFlat;
-  const { R, shade, rnd, disc, line, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL } = F.shared;
+  const { R, shade, rnd, disc, line, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, legAt, dinerLook, RUNNER, EAT } = F.shared;
 
-  const W = 464, H = 264, OX = 200, OY = 62, GX = 16, GY = 12, WH = 56;   // kitchen floor is x 0..12; x 12..16 is the dining room
+  const W = 464, H = 296, OX = 200, OY = 62, GX = 16, GY = 12, WH = 56;   // kitchen floor is x 0..12; x 12..16 is the dining room
   const SEAT = 8, DESKZ = 13, MAX_SLOTS = 7, MGR = 6, SPEED = 2.6; // SPEED in tiles/second; slot 6 = the pass (head chef)
   const AISLE = 3.55, FRONT1 = 6.55;      // desk-to-desk dotted lanes: the aisle between the rows / the strip in front of row 1
   const sx = (x, y) => OX + Math.round((x - y) * 16);
@@ -74,10 +74,9 @@
   for (const st of SEATS) block(st.x - 0.1, st.y - 0.1, st.x + 0.1, st.y + 0.1);   // standing marks (walkable only as a destination)
   block(COUNTER.x0, COUNTER.y0, COUNTER.x1, COUNTER.y1);
   for (const p of PLANTS) block(p.x, p.y, p.x + 1, p.y + 1);
-  // dining room east of the pass: one table per project, the diner behind it, the runner serves from the table's -x side
-  const DIN = { x0: 12, x1: 16, y1: 8 };
-  for (let y = DIN.y1; y < GY; y++) block(DIN.x0, y, DIN.x1, y + 1);   // no floor in front of the dining room
-  const TABLES = [[13, 1], [15, 1], [13, 4], [15, 4], [13, 7], [15, 7]].map(([tx, ty]) => {
+  // dining room east of the pass: tables in rows of two (enough for every station), the diner behind it, the runner serves from the table's -x side
+  const DIN = { x0: 12, x1: 16, y1: GY };
+  const TABLES = Array.from({ length: 8 }, (_, i) => [13 + 2 * (i % 2), 1 + 3 * (i >> 1)]).map(([tx, ty]) => {
     block(tx, ty - 1, tx + 1, ty + 1);
     return { x: tx + 0.5, y: ty + 0.5, diner: { x: tx + 0.5, y: ty - 0.05 }, spot: { x: tx - 0.5, y: ty + 0.5, face: 0 } };
   });
@@ -227,14 +226,13 @@
   function buildBackground() {
     const bg = mk(W, H), c = bg.getContext('2d');
     // floor slab edges
-    poly(c, [A(12, DIN.y1, 0), A(12, 12, 0), A(12, 12, -7), A(12, DIN.y1, -7)], '#7a3a28');
     poly(c, [A(0, 12, 0), A(12, 12, 0), A(12, 12, -7), A(0, 12, -7)], '#964832');
     // quarry-tile floor (warm kitchen clay, two shades)
     for (let j = 0; j < GY; j++) for (let i = 0; i < 12; i++) poly(c, [A(i, j), A(i + 1, j), A(i + 1, j + 1), A(i, j + 1)], (i + j) % 2 ? '#c86a42' : '#b85c38');
     for (let i = 0; i <= 12; i++) { const a = A(i, 0), b = A(i, GY); line(c, a[0], a[1], b[0], b[1], 'rgba(70,28,16,.28)', 1); }
     for (let j = 0; j <= GY; j++) { const a = A(0, j), b = A(12, j); line(c, a[0], a[1], b[0], b[1], 'rgba(70,28,16,.28)', 1); }
-    let a = A(0, 12), b = A(12, 12), d = A(12, DIN.y1);
-    line(c, a[0], a[1], b[0], b[1], '#d4885c', 1); line(c, b[0], b[1], d[0], d[1], '#a85838', 1);
+    let a = A(0, 12), b = A(12, 12), d;
+    line(c, a[0], a[1], b[0], b[1], '#d4885c', 1);
     // dining room: oak boards running along x, its own slab edges, a brass strip at the kitchen threshold
     poly(c, [A(DIN.x1, 0, 0), A(DIN.x1, DIN.y1, 0), A(DIN.x1, DIN.y1, -7), A(DIN.x1, 0, -7)], '#5a3a22');
     poly(c, [A(DIN.x0, DIN.y1, 0), A(DIN.x1, DIN.y1, 0), A(DIN.x1, DIN.y1, -7), A(DIN.x0, DIN.y1, -7)], '#74492a');
@@ -916,7 +914,6 @@
     const k = Math.floor(t * 2) % 4;
     for (let i = 0; i < 3; i++) { R(c, x - 3, y - 3 + i * 4, 1, 1, i < k ? '#30a46c' : '#9a8f6a'); R(c, x - 1, y - 3 + i * 4, 5, 1, '#9a8f6a'); }
   }
-  const faceToward = (fx, fy, tx, ty) => { const dx = tx - fx, dy = ty - fy; return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 0 : 2) : (dy > 0 ? 1 : 3); };
 
   /** Floor route (tile coordinates) between two desks, along the aisles / gaps between the desks, so dotted lines and flying papers never cross
    *  furniture. `off` separates parallel lanes so several helpers' lines do not lie on top of each other. */
@@ -979,16 +976,7 @@
   }
 
   // ---------- dining room ----------
-  const DINER = { skin: ['#f1c9a0', '#e0a97a', '#c68b5c', '#8d5a3b', '#f6d6b8'], hair: ['#2b1d14', '#6b3f1d', '#d9a441', '#1c1c24', '#a23b2a', '#8a8f98'],
-    shirt: ['#3e8ef7', '#e93d82', '#12a594', '#f5a524', '#8e4ec6', '#e5484d'], style: ['short', 'long', 'spiky', 'bun', 'cap'] };
-  const RUNNER = { shirt: '#2a2e36', pants: '#1c1c24', skin: '#e0a97a', hair: '#2b1d14', hairStyle: 'short' };
   const WOOD = { top: '#8a5a34', se: '#4a2c18', sw: '#6b4226' }, CLOTH = { top: '#3e7a56', se: '#1f4a32', sw: '#2f6444', hi: '#6aa882' };
-  const EAT = 20;   // seconds a served plate stays on the table
-  function dinerLook(name) {   // same project, same diner
-    let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-    const p = (arr, k) => arr[Math.floor(rnd(h % 9973 + k) * arr.length)];
-    return { skin: p(DINER.skin, 1), hair: p(DINER.hair, 2), shirt: p(DINER.shirt, 3), hairStyle: p(DINER.style, 4), pants: '#2f3b52' };
-  }
   function drawDiner(c, look, t, ph, eating) {
     const sh = look.shirt, bite = eating && Math.floor(t * 2.5 + ph * 5) % 3 === 0;
     R(c, -4, -10, 9, 3, look.pants);
@@ -1024,18 +1012,7 @@
   function runnerAt(k, e) {
     const tb = TABLES[k];
     tb.legs = tb.legs || [[RHOME, PICKUP, 0.6], [PICKUP, tb.spot, 1.5], [tb.spot, RHOME, 0]].map(([a, b, hold]) => ({ pts: walkBetween(a, b), hold, face: b.face }));
-    for (let i = 0; i < 3; i++) {
-      const { pts, hold, face } = tb.legs[i];
-      for (let j = 1; j < pts.length; j++) {
-        const p = pts[j - 1], q = pts[j], d = Math.hypot(q.x - p.x, q.y - p.y) / SPEED;
-        if (e < d) { const f = e / d; return { x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f, face: faceToward(p.x, p.y, q.x, q.y), walk: true, carry: i === 1, served: i === 2 }; }
-        e -= d;
-      }
-      const end = pts[pts.length - 1];
-      if (e < hold) return { x: end.x, y: end.y, face, walk: false, carry: false, served: i === 1 };
-      e -= hold;
-    }
-    return null;
+    return legAt(tb.legs, e, SPEED);
   }
   function diningObjects(objs, dining, t) {
     dining.tables.forEach((d, k) => {

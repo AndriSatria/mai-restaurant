@@ -83,7 +83,7 @@
           Object.assign(a, agent); slotMoved(a, prevSlot);
           if (prev !== a.state && a.state === 'thinking') a.bubble = null;
           if (prev !== a.state && a.state === 'error') a.errAt = performance.now();   // the pot boils over
-          if (prev !== a.state && a.state === 'done' && !orders.includes(a.cwd)) orders.push(a.cwd);   // one queued plate per table, so a busy kitchen builds no backlog
+          if (prev !== a.state && a.state === 'done') order(a.cwd);
           syncHelp(a, false);
         }
         if (a.id === selectedId) updateHead();
@@ -515,7 +515,8 @@
   // dining room: one table per project (agent cwd, in station order); the runner serves each finished task to its table
   const orders = [], servedAt = new Map();
   let run = null;
-  const projects = () => [...new Set([...agents.values()].sort((p, q) => p.slot - q.slot).map((a) => a.cwd))].slice(0, Office.TABLES.length);   // shortcut: projects past the sixth get no table, add tables if that happens
+  const order = (cwd) => { if (!orders.includes(cwd)) orders.push(cwd); };   // one queued plate per table, so a busy kitchen builds no backlog
+  const projects = () => [...new Set([...agents.values()].sort((p, q) => p.slot - q.slot).map((a) => a.cwd))].slice(0, Office.TABLES.length);
   function diningView(now) {
     if (!Office.runnerAt) return null;
     const list = projects();
@@ -849,6 +850,7 @@
           else if (a.dest === 'serve') {      // dish handed over at the pass: the lead gets the ✓ / ! bubble
             a.mode = 'serve'; a.serveUntil = now + 1800 * TS;
             const p = a.help && agents.get(a.help.parentId); if (p) p.rcv = { t0: now, ok: a.help.phase !== 'failed' };
+            if (p && a.help.phase !== 'failed') order(p.cwd);   // the runner takes a kitchen hand's dish to the lead's table
           }
           else { a.mode = 'chat'; a.waitSince = now; }
         } else a.target++;
@@ -983,6 +985,7 @@
     toolTrip,
     tickets: () => collectTickets(performance.now()),
     dining: () => lastDining,
+    orders: () => (run ? [run.cwd] : []).concat(orders),
     ticketHits: () => (Office.ticketHits && Office.ticketHits()) || [],
     states: () => [...agents.values()].map((a) => ({ id: a.id, main: !!a.main, slot: a.slot, meet: a.away && a.mode === 'meet', dest: a.dest, name: a.name, type: a.type, state: a.state, tool: a.tool, x: a.x, y: a.y, away: a.away, mode: a.mode, act: a.act && a.act.kind, cook: a.cook || null, ask: a.ask ? a.ask.reqId : null, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1), subs: (a.subs || []).length, helping: a.help ? a.help.phase : null, home: !a.away, seated: !a.away && a.mode === 'sit' })),
     help: (id) => { const a = agents.get(id); return a && a.help ? { phase: a.help.phase, parentId: a.help.parentId, role: a.help.role, label: a.help.label, tool: a.help.tool, say: a.help.say, x: a.x, y: a.y, mode: a.mode, away: a.away, seated: !a.away && a.mode === 'sit', peer: !!a.help.peer, tile: Math.floor(a.x) + ',' + Math.floor(a.y) } : null; },

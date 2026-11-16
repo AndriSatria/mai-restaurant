@@ -220,9 +220,11 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const subTxt = await page.evaluate(() => document.querySelector('#transcript details.msg.sub summary').textContent);
     assert(/^●Agent\([^)]+\)⎿\w+ · \w+ · (running|done)/.test(subTxt), 'helper reads "● Agent(label)" then "⎿ colleague · role · status": ' + subTxt);
     // flights + inferred interactions during the run
-    let kinds = new Set(), sawPeerTalk = false, sawHuddle = false, handTrips = new Set(), served = [], stacked = false;
+    let kinds = new Set(), sawPeerTalk = false, sawHuddle = false, handTrips = new Set(), served = [], stacked = false, leadTable = false;
     for (let i = 0; i < 900 && !(sawHuddle && kinds.has('out') && sawPeerTalk && served.length >= 4); i++) {
-      const r = await page.evaluate((id) => ({ st: window.harness.states().filter((s) => s.helping), f: window.harness.flights().map((f) => f.kind), pe: [...window.harness.agents.values()].some((a) => (window.harness.help(a.id) || {}).peer), hu: window.harness.huddle(id) }), adaId);
+      const r = await page.evaluate((id) => ({ st: window.harness.states().filter((s) => s.helping), f: window.harness.flights().map((f) => f.kind), pe: [...window.harness.agents.values()].some((a) => (window.harness.help(a.id) || {}).peer), hu: window.harness.huddle(id),
+        lead: (({ state, cwd }) => ({ state, cwd }))(window.harness.agents.get(id)), orders: window.harness.orders() }), adaId);
+      if (r.lead.state !== 'done' && r.orders.includes(r.lead.cwd)) leadTable = true;
       const atPass = r.st.filter((s) => s.mode === 'serve').map((s) => s.x.toFixed(1) + ',' + s.y.toFixed(1));
       if (new Set(atPass).size !== atPass.length) stacked = true;
       for (const s of r.st) {
@@ -235,6 +237,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(handTrips.has('pantry'), 'kitchen hands walk to the pantry for their Read/Grep jobs: ' + [...handTrips].join(','));
     assert(served.length === 4 && served.every((p) => p.x > 6 && p.x < 10 && p.y < 3), 'every helper carries a dish to the pass when done: ' + JSON.stringify(served.map((p) => [p.x.toFixed(1), p.y.toFixed(1)])));
     assert(!stacked, 'kitchen hands at the pass at the same time stand on different spots');
+    assert(leadTable, "a kitchen hand's dish at the pass is ordered for the lead's table while the lead is still working");
     assert(sawPeerTalk, 'two helpers touching the same file compare notes via bubbles (inferred peer talk)');
     assert(sawHuddle, 'synchronized wrap-up (celebration at every desk + team wrap-up chip) shows when every helper has reported');
     const inf = await page.evaluate((id) => ({ team: window.harness.team(id), tags: [...document.querySelectorAll('#teamLog .te .inf')].map((e) => e.textContent) }), adaId);
@@ -487,6 +490,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     await page.waitForFunction(() => { const d = window.harness.dining(), t = d.tables.find((x) => x.name === 'tmp'); return t && t.served != null && t.served < 2; }, null, { timeout: 40000 });
     const din = await page.evaluate(() => ({ names: window.harness.dining().tables.map((t) => t.name), cwds: new Set([...window.harness.agents.values()].map((a) => a.cwd)).size }));
     assert(din.names.length === din.cwds && new Set(din.names).size === din.cwds, `one dining table per project (${din.names.join(', ')}), and Linus's finished task reached the /tmp table`);
+    assert(await page.evaluate(() => window.Office.TABLES.length >= window.Office.MAX_SLOTS), 'a table for every station, so seven projects wrap into a fourth row');
 
     // ---- chat panel: Claude Code style formatting stays safe (model text is never parsed as HTML) ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);
@@ -518,6 +522,27 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     // integer pixel scale
     const sc = await page.evaluate(() => { const c = document.getElementById('office'); return [c.width / window.Office.W, c.height / window.Office.H]; });
     assert(Number.isInteger(sc[0]) && sc[0] === sc[1], `canvas is scaled by an integer factor (x${sc[0]})`);
+
+    // ---- flat view: same dining room, the runner stays in the dining aisles and never walks through a table ----
+    await page.goto(`http://localhost:${PORT}/?wander=off&view=flat`);
+    await page.waitForSelector('#conn.on');
+    const flat = await page.evaluate(() => {
+      const O = window.Office, bad = [];
+      O.TABLES.forEach((tb, k) => {
+        let carried = false, served = false, r;
+        for (let e = 0; (r = O.runnerAt(k, e)); e += 0.05) {
+          if (r.x < 384 || r.x > O.W || r.y > O.H) bad.push(['outside', k, r.x.toFixed(1), r.y.toFixed(1)]);
+          if (O.TABLES.some((t) => Math.abs(r.x - t.x) < 20 && r.y > t.y - 6 && r.y < t.y + 10)) bad.push(['through a table', k, r.x.toFixed(1), r.y.toFixed(1)]);
+          carried = carried || r.carry; served = served || r.served;
+        }
+        if (!carried || !served) bad.push(['no delivery', k]);
+      });
+      return { flat: O === window.OfficeFlat, tables: O.TABLES.length >= O.MAX_SLOTS, bad: bad.slice(0, 5) };
+    });
+    assert(flat.flat && flat.tables && !flat.bad.length, 'flat view has the dining room: a table per station, runner trips stay in the aisles ' + JSON.stringify(flat.bad));
+    await page.evaluate((id) => window.harness.send({ type: 'send', id, text: 'hello' }), burnId);
+    await page.waitForFunction(() => { const t = window.harness.dining().tables.find((x) => x.name === 'tmp'); return t && t.served != null && t.served < 2; }, null, { timeout: 40000 });
+    assert(true, 'flat view: a finished task is served to its project table');
   } finally {
     await browser.close(); srv.kill('SIGTERM');
   }

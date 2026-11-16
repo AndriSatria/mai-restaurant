@@ -1,11 +1,11 @@
 /* mAI-restaurant - FLAT (top-down) procedural pixel-art kitchen, used with ?view=flat.
  * (The default view is the isometric renderer in office-iso.js.)
- * Everything is drawn with fillRect on a small logical canvas (384x240) and then
+ * Everything is drawn with fillRect on a small logical canvas (480x240: kitchen x 0..384, dining room x 384..480) and then
  * blitted to the visible canvas with integer scaling and smoothing disabled.
  * Text (names, tool chips, speech bubbles) is drawn on the visible canvas at native res. */
 (function () {
   'use strict';
-  const W = 384, H = 240;
+  const W = 480, H = 240, DX = 384;
   const COLS = [60, 150, 240];
   const ROWS = [94, 178];
   const SLOTS = [];
@@ -52,7 +52,7 @@
     const bg = document.createElement('canvas'); bg.width = W; bg.height = H;
     const c = bg.getContext('2d');
     // quarry-tile floor
-    for (let ty = 0; ty < 13; ty++) for (let tx = 0; tx < 24; tx++) {
+    for (let ty = 0; ty < 13; ty++) for (let tx = 0; tx < DX / 16; tx++) {
       const y = 40 + ty * 16;
       R(c, tx * 16, y, 16, 16, (tx + ty) % 2 ? '#c86a42' : '#b85c38');
       R(c, tx * 16, y, 16, 1, '#8a3a22'); R(c, tx * 16, y, 1, 16, '#8a3a22');
@@ -104,6 +104,14 @@
     R(c, 354, 9, 3, 5, '#7a5236'); R(c, 358, 9, 1, 5, '#7a5236'); R(c, 354, 9, 5, 1, '#7a5236');
     R(c, 361, 9, 3, 1, '#7a5236'); R(c, 361, 9, 1, 5, '#7a5236'); R(c, 361, 11, 3, 1, '#7a5236'); R(c, 361, 13, 3, 1, '#7a5236'); R(c, 363, 9, 1, 5, '#7a5236');
     R(c, 366, 9, 3, 5, '#7a5236'); R(c, 366, 9, 3, 1, '#7a5236'); R(c, 366, 13, 3, 1, '#7a5236');
+    // dining room: oak boards, cream plaster over a wood wainscot, one window, a brass strip at the kitchen threshold
+    for (let y = 40, j = 0; y < H; y += 8, j++) { R(c, DX, y, W - DX, 8, j % 2 ? '#a8703e' : '#9a6436'); R(c, DX + ((j * 37) % (W - DX)), y, 1, 8, 'rgba(60,30,12,.35)'); }
+    R(c, DX, 40, W - DX, 3, 'rgba(0,0,0,.18)');
+    R(c, DX, 0, W - DX, 40, '#e9dcc0'); R(c, DX, 0, W - DX, 4, '#b8a888');
+    R(c, DX, 22, W - DX, 18, '#6b4226'); R(c, DX, 22, W - DX, 2, '#8a5a34'); R(c, DX, 38, W - DX, 2, '#3a2414');
+    for (let x = DX + 6; x < W - 10; x += 16) R(c, x, 26, 10, 9, '#5a3620');
+    R(c, 419, 3, 42, 18, '#5a3a22'); R(c, 420, 4, 40, 16, '#8ec9ff'); R(c, 420, 14, 40, 6, '#a9dcff'); R(c, 439, 4, 2, 16, '#5a3a22'); R(c, 424, 7, 7, 2, '#fff');
+    R(c, DX - 2, 0, 4, 40, '#8a5a34'); R(c, DX, 40, 1, H - 40, '#caa24a');
     return bg;
   }
 
@@ -149,6 +157,7 @@
         R(c, cx - 7, top - 2, 14, 5, hair); R(c, cx - 7, top + 3, 2, 3, hair); R(c, cx + 5, top + 3, 2, 3, hair);
         R(c, cx - 6, top + 2, 5, 1, hair); R(c, cx - 5, top - 2, 5, 1, shade(hair, 35));
     }
+    if (face.hat === 'none') return;
     // chef hat sits on top of whatever hair was drawn
     const tall = face.hat === 'toque', hat = '#f4f1e8', hatD = '#c8c4b8', hatL = '#fffdf6';
     if (tall) {
@@ -417,6 +426,63 @@
     lines.forEach((l, i) => ctx.fillText(l, x + pad, y + pad + i * lh));
   }
 
+  // ---------- dining room ----------
+  const faceToward = (fx, fy, tx, ty) => { const dx = tx - fx, dy = ty - fy; return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 0 : 2) : (dy > 0 ? 1 : 3); };
+  /** where a walker is e seconds along legs [{pts, hold, face}] (home -> pass -> table -> home); null once back home */
+  function legAt(legs, e, speed) {
+    for (let i = 0; i < legs.length; i++) {
+      const { pts, hold, face } = legs[i];
+      for (let j = 1; j < pts.length; j++) {
+        const p = pts[j - 1], q = pts[j], d = Math.hypot(q.x - p.x, q.y - p.y) / speed;
+        if (e < d) { const f = e / d; return { x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f, face: faceToward(p.x, p.y, q.x, q.y), walk: true, carry: i === 1, served: i === 2 }; }
+        e -= d;
+      }
+      const end = pts[pts.length - 1];
+      if (e < hold) return { x: end.x, y: end.y, face, walk: false, carry: false, served: i === 1 };
+      e -= hold;
+    }
+    return null;
+  }
+  // rows of two tables; the runner walks the x = LANE aisle and serves from the table's left side
+  const LANE = 396, PICKUP = { x: LANE, y: 192 }, RHOME = { x: LANE, y: 56 };
+  const TABLES = Array.from({ length: 8 }, (_, i) => {
+    const x = 420 + 42 * (i % 2), y = 78 + 44 * (i >> 1), spot = { x: i % 2 ? 440 : LANE, y: y + 4 };
+    const via = spot.x === LANE ? [spot] : [{ x: LANE, y: y + 24 }, { x: spot.x, y: y + 24 }, spot];
+    return { x, y, legs: [{ pts: [RHOME, PICKUP], hold: 0.6 }, { pts: [PICKUP, ...via], hold: 1.5 }, { pts: [...via].reverse().concat(RHOME), hold: 0 }] };
+  });
+  const runnerAt = (k, e) => legAt(TABLES[k].legs, e, 40);
+  const DINER = { skin: ['#f1c9a0', '#e0a97a', '#c68b5c', '#8d5a3b', '#f6d6b8'], hair: ['#2b1d14', '#6b3f1d', '#d9a441', '#1c1c24', '#a23b2a', '#8a8f98'],
+    shirt: ['#3e8ef7', '#e93d82', '#12a594', '#f5a524', '#8e4ec6', '#e5484d'], style: ['short', 'long', 'spiky', 'bun', 'cap'] };
+  const RUNNER = { shirt: '#2a2e36', pants: '#1c1c24', skin: '#e0a97a', hair: '#2b1d14', hairStyle: 'short' };
+  const EAT = 20;   // seconds a served plate stays on the table
+  function dinerLook(name) {   // same project, same diner
+    let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const p = (arr, k) => arr[Math.floor(rnd(h % 9973 + k) * arr.length)];
+    return { skin: p(DINER.skin, 1), hair: p(DINER.hair, 2), shirt: p(DINER.shirt, 3), hairStyle: p(DINER.style, 4), pants: '#2f3b52' };
+  }
+  function drawDinTable(c, tb, d, t, k) {
+    const { x, y } = tb, look = dinerLook(d.name), eating = d.served != null && d.served < EAT;
+    const bite = eating && Math.floor(t * 2.5 + k * 1.85) % 3 === 0;
+    R(c, x - 5, y - 30, 10, 6, '#6b4226'); R(c, x - 5, y - 30, 10, 1, '#8a5a34');   // chair back
+    R(c, x - 6, y - 16, 12, 12, look.shirt); R(c, x - 2, y - 17, 4, 2, shade(look.skin, -25));
+    drawHead(c, x, y - 28, look, { hat: 'none', mood: eating ? 'happy' : 'normal', blink: ((t * 1000 + k * 1300) % 3600) < 140 });
+    R(c, x - 13, y - 5, 26, 6, '#3e7a56'); R(c, x - 13, y - 5, 26, 1, '#6aa882'); R(c, x - 13, y + 1, 26, 3, '#2f6444');
+    R(c, x - 11, y + 4, 2, 5, '#4a2c18'); R(c, x + 9, y + 4, 2, 5, '#4a2c18');
+    R(c, x + 8, y - 8, 2, 4, '#cfe8f4');
+    if (eating) { disc(c, x, y - 3, 3, '#f0eee8'); disc(c, x, y - 3, 2, '#fff'); if (d.served < EAT * 0.7) disc(c, x, y - 3, 1, '#c84830'); }
+    if (bite) { R(c, x + 5, y - 15, 2, 6, look.shirt); R(c, x + 5, y - 17, 2, 2, look.skin); R(c, x + 6, y - 20, 1, 3, '#c8ccd4'); R(c, x - 8, y - 9, 3, 3, look.skin); }
+    else { R(c, x - 8, y - 9, 3, 3, look.skin); R(c, x + 5, y - 9, 3, 3, look.skin); }
+  }
+  function drawDining(c, dining, t) {
+    const r = dining.runner || RHOME;
+    const items = dining.tables.map((d, k) => ({ y: TABLES[k].y + 6, draw: () => drawDinTable(c, TABLES[k], d, t, k) }));
+    items.push({ y: r.y, draw: () => {
+      drawStanding(c, { look: RUNNER, x: r.x, y: r.y, mode: r.walk ? 'walk' : 'stand', state: 'idle', phase: 0.5, slot: -1 }, t);
+      if (r.carry) { const px = Math.round(r.x) + 9, py = Math.round(r.y) - 15; disc(c, px, py, 3, '#f0eee8'); disc(c, px, py, 2, '#fff'); disc(c, px, py - 1, 1, '#c84830'); }
+    } });
+    for (const it of items.sort((a, b) => a.y - b.y)) it.draw();
+  }
+
   const STATE_COL = { idle: '#8b90ad', thinking: '#b7a8ff', working: '#7fd6ff', done: '#6be39b', error: '#ff6b70' };
 
   // ---------- main ----------
@@ -438,6 +504,7 @@
     for (let i = 0; i < MAX_SLOTS; i++) drawSeat(lc, SLOTS[i], bySlot[i] || null, t);
     const away = scene.entries.filter((e) => e.away).sort((a, b) => a.y - b.y);
     for (const e of away) drawStanding(lc, e, t);
+    if (scene.dining) drawDining(lc, scene.dining, t);
     // selection / hover outlines
     for (const e of scene.entries) {
       const s = SLOTS[e.slot];
@@ -472,6 +539,7 @@
       if (e.queued) pillText(ctx, '+' + e.queued + ' queued', s.cx * S, (s.cy + 38) * S, U * 0.85, '#14151f', '#f5c542', true);
       if (e.bubble) drawBubble(ctx, e.bubble, px * S, (headTop - 18) * S, S, U, canvas.width);
     }
+    if (scene.dining) scene.dining.tables.forEach((d, k) => pillText(ctx, d.name, TABLES[k].x * S, (TABLES[k].y + 5) * S, U * 0.8, '#f4f1e8', 'rgba(58,36,20,.9)', true));
     for (let i = 0; i < MAX_SLOTS; i++) if (!bySlot[i] && scene.hoverSlot === i) pillText(ctx, '＋ hire', SLOTS[i].cx * S, (SLOTS[i].cy + 28) * S, U, '#0e1f1a', '#5ff2a5', true);
   }
 
@@ -503,8 +571,8 @@
     drawHead(c, 10, 8, look, { mood: 'happy', hat: main ? 'toque' : 'cap' });
   }
 
-  window.OfficeFlat = { W, H, SLOTS, MAX_SLOTS, MGR: SLOTS.length - 1, render, hitTest, walkPath, SPOTS, drawAvatar, COFFEE, AISLE,
+  window.OfficeFlat = { W, H, SLOTS, MAX_SLOTS, MGR: SLOTS.length - 1, render, hitTest, walkPath, SPOTS, drawAvatar, COFFEE, AISLE, TABLES, runnerAt,
     SPEED: 40, STEP: 0.5, // walking speed in world units/s (px here) and canvas scale step
     // helpers re-used by the isometric renderer
-    shared: { R, shade, rnd, disc, line, bmp, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, dashedRect } };
+    shared: { R, shade, rnd, disc, line, bmp, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, dashedRect, legAt, dinerLook, RUNNER, EAT } };
 })();
