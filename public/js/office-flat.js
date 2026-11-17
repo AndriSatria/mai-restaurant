@@ -508,6 +508,14 @@
   }
   const slip = (c, x, y) => { R(c, x, y, 5, 6, '#7a7058'); R(c, x, y, 4, 5, '#fffbe8'); R(c, x + 1, y + 1, 2, 1, '#9a8f6a'); R(c, x + 1, y + 3, 2, 1, '#9a8f6a'); };
 
+  // kitchen lighting by the local clock, tinting only drawn pixels; the lunch rush gets plain full light
+  const LIGHT = { morning: 'rgba(255,214,150,.18)', evening: 'rgba(230,100,30,.28)', night: 'rgba(8,12,40,.62)' };
+  function lighting(c, light) {
+    if (!LIGHT[light]) return;
+    c.globalCompositeOperation = 'source-atop'; c.fillStyle = LIGHT[light]; c.fillRect(0, 0, c.canvas.width, c.canvas.height);
+    c.globalCompositeOperation = 'source-over';
+  }
+
   const STATE_COL = { idle: '#8b90ad', thinking: '#b7a8ff', working: '#7fd6ff', done: '#6be39b', error: '#ff6b70' };
 
   // ---------- main ----------
@@ -538,6 +546,7 @@
       else if (e.id === scene.hoverId) dashedRect(lc, s.cx - 33, s.cy - 42, 66, 70, 'rgba(255,255,255,.7)', 0);
     }
     if (scene.hoverSlot != null && !bySlot[scene.hoverSlot]) { const s = SLOTS[scene.hoverSlot]; dashedRect(lc, s.cx - 33, s.cy - 42, 66, 70, 'rgba(95,242,165,.85)', 0); }
+    lighting(lc, scene.light);
 
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
@@ -607,5 +616,5 @@
   window.OfficeFlat = { W, H, SLOTS, MAX_SLOTS, MGR: SLOTS.length - 1, render, hitTest, walkPath, SPOTS, drawAvatar, COFFEE, AISLE, TABLES, runnerAt, billHits: () => lastBillHits,
     SPEED: 40, STEP: 0.5, // walking speed in world units/s (px here) and canvas scale step
     // helpers re-used by the isometric renderer
-    shared: { R, shade, rnd, disc, line, bmp, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, dashedRect, legAt, dinerLook, RUNNER, EAT, drawBill, slip } };
+    shared: { R, shade, rnd, disc, line, bmp, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, dashedRect, legAt, dinerLook, RUNNER, EAT, drawBill, slip, lighting } };
 })();

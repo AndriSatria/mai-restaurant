@@ -11,7 +11,7 @@
 (function () {
   'use strict';
   const F = window.OfficeFlat;
-  const { R, shade, rnd, disc, line, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, legAt, dinerLook, RUNNER, EAT, drawBill, slip } = F.shared;
+  const { R, shade, rnd, disc, line, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, legAt, dinerLook, RUNNER, EAT, drawBill, slip, lighting } = F.shared;
 
   const W = 464, H = 296, OX = 200, OY = 62, GX = 16, GY = 12, WH = 56;   // kitchen floor is x 0..12; x 12..16 is the dining room
   const SEAT = 8, DESKZ = 13, MAX_SLOTS = 7, MGR = 6, SPEED = 2.6; // SPEED in tiles/second; slot 6 = the pass (head chef)
@@ -1146,9 +1146,11 @@
   /** Live order tickets hanging from the pass rail. Returns logical-space hit boxes. */
   function drawTickets(c, tickets, t) {
     const hits = [];
+    lastSteam = 0;
     if (!tickets || !tickets.length) return hits;
     const n = tickets.length, w = 0.17, gap = 0.03, total = n * w + (n - 1) * gap;
     const x0 = 7.46 + Math.max(0, (1.44 - total) / 2);
+    lastSteam = Math.min(4, tickets.filter((tk) => tk.state !== 'done').length);   // a busier queue steams more
     tickets.forEach((tk, i) => {
       const x = x0 + i * (w + gap), y = 0.14;
       const drop = tk.state === 'progress' && Math.floor(t * 5 + i) % 4 === 0 ? 0.03 : 0;
@@ -1160,6 +1162,12 @@
       if (tk.state === 'done') {
         const pl = A(x + w / 2, y + 0.08, z1 + 4);
         disc(c, pl[0], pl[1], 3, '#f0eee8'); disc(c, pl[0], pl[1], 2, '#fff'); disc(c, pl[0], pl[1], 1, '#c84830');
+      } else for (let k = 0; k < lastSteam; k++) {   // grey-edged puffs so they read against the white wall
+        const p = A(x + w / 2, y, z2 + 1), q = (t * 6 + k * 3.3 + i * 1.7) % 13;
+        c.globalAlpha = 0.8 * (1 - q / 13);
+        const px = Math.round(p[0] - 2 + k + Math.sin(t * 2 + k + i) * 1.5), py = Math.round(p[1] - 3 - q);
+        R(c, px, py, 3, 3, '#9aa4b4'); R(c, px, py, 2, 2, '#fff');
+        c.globalAlpha = 1;
       }
       const corners = [A(x, y, z2), A(x + w, y, z2), A(x, y + 0.1, z1), A(x + w, y + 0.1, z1)];
       const lx = Math.min(...corners.map((p) => p[0])) - 1, rx = Math.max(...corners.map((p) => p[0])) + 1;
@@ -1170,7 +1178,7 @@
   }
 
   // ---------- main ----------
-  let lastTicketHits = [], lastBillHits = [];
+  let lastTicketHits = [], lastBillHits = [], lastSteam = 0;
   const bg = buildBackground();
   const logical = mk(W, H), lc = logical.getContext('2d');
   const labelPt = (e) => { const s = SLOTS[e.slot !== undefined ? e.slot : e.i]; return [sx(s.lab.x, s.lab.y), sy(s.lab.x, s.lab.y, 0) + 6]; };
@@ -1272,6 +1280,7 @@
     }
 
     const ticketHits = drawTickets(lc, scene.tickets || [], t);
+    lighting(lc, scene.light);
 
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
@@ -1381,7 +1390,7 @@
   }
 
   window.OfficeIso = {
-    W, H, SLOTS, MAX_SLOTS, render, hitTest, ticketHits: () => lastTicketHits, billHits: () => lastBillHits, walkPath, SPOTS, SPEED, STEP: 1,
+    W, H, SLOTS, MAX_SLOTS, render, hitTest, ticketHits: () => lastTicketHits, billHits: () => lastBillHits, steam: () => lastSteam, walkPath, SPOTS, SPEED, STEP: 1,
     drawAvatar: F.drawAvatar, GX, GY, isBlocked, project: (x, y, z) => [sx(x, y), sy(x, y, z || 0)],
     deskPoint: (slot) => { const s = SLOTS[slot]; return [sx(s.desk.x, s.desk.y), sy(s.desk.x, s.desk.y, DESKZ)]; },
     TABLES, runnerAt, TABLE, SEATS, MGR, MD, COUNTER, PLANTS, SETS, HEAT, stationSet, tablePoint: () => [sx(TABLE.x, TABLE.y), sy(TABLE.x, TABLE.y, TABLE.h)],

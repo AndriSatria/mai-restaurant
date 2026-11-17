@@ -17,6 +17,9 @@
 //   kitchen-15-bill.png      each finished run leaves a receipt on its table
 //   kitchen-16-bill-details.png  hovering a receipt: time, pantry trips, edits, commands, tokens and cost (Claude reports them)
 //   kitchen-17-flat-bill.png the flat view with a receipt clicked open
+//   kitchen-18-morning.png   ?hour=8: soft morning light (every other shot pins ?hour=12, the lunch rush)
+//   kitchen-19-evening.png   ?hour=19: warm evening light, a busy queue steaming on the pass
+//   kitchen-20-after-hours.png ?hour=23: the dim after-hours kitchen
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -58,7 +61,7 @@ const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d
   const idle = (ms = 30000) => page.waitForFunction(() => window.harness.states().every((a) => !a.away && !a.act && (a.state === 'idle' || a.state === 'done')), null, { timeout: ms });
 
   try {
-    await page.goto(`http://localhost:${PORT}/?wander=off`);
+    await page.goto(`http://localhost:${PORT}/?wander=off&hour=12`);
     await page.waitForSelector('#conn.on');
     for (const [name, type, cwd] of [['Ada', 'mock', ROOT], ['Linus', 'cursor', ROOT], ['Grace', 'claude', ROOT], ['Ken', 'mock', PROJ['bistro-api']], ['Alan', 'mock', PROJ['bistro-api']], ['Margaret', 'mock', PROJ['menu-site']], ['Barbara', 'mock', PROJ['menu-site']]]) {
       await page.evaluate(([n, t, cwd]) => window.harness.send({ type: 'hire', name: n, cwd, agentType: t }), [name, type, cwd]);
@@ -270,7 +273,7 @@ const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d
     await page.mouse.move(5, 5);
 
     // 12: flat view: Margaret's plate is on the menu-site table, the runner carries Ken's
-    await page.goto(`http://localhost:${PORT}/?wander=off&view=flat`);
+    await page.goto(`http://localhost:${PORT}/?wander=off&view=flat&hour=12`);
     await page.waitForSelector('#conn.on');
     await idle(40000).catch(() => {});
     await sendTo('Margaret', 'stir the reduction');
@@ -288,7 +291,7 @@ const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d
     await shot('kitchen-17-flat-bill.png');
 
     // 13: seven cooks on seven projects: the seventh table goes into a fourth row
-    await page.goto(`http://localhost:${PORT}/?wander=off`);
+    await page.goto(`http://localhost:${PORT}/?wander=off&hour=12`);
     await page.waitForSelector('#conn.on');
     await page.evaluate(() => { for (const a of window.harness.agents.values()) window.harness.send({ type: 'fire', id: a.id }); });
     await page.waitForFunction(() => window.harness.agents.size === 0);
@@ -307,6 +310,20 @@ const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d
     await page.waitForFunction(() => { const d = window.harness.dining(); return d.tables.length === 7 && d.tables.filter((t) => t.served != null).length >= 4 && d.runner && d.runner.carry && d.runner.x > 12.2 && d.runner.y > 9; }, null, { timeout: 120000 });
     await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
     await shot('kitchen-13-seven-tables.png');
+
+    // 18-20: lighting by the clock; for the evening every cook gets two orders so the rail is busy
+    for (const [hour, name] of [[8, 'kitchen-18-morning.png'], [19, 'kitchen-19-evening.png'], [23, 'kitchen-20-after-hours.png']]) {
+      await page.goto(`http://localhost:${PORT}/?wander=off&hour=${hour}`);
+      await page.waitForSelector('#conn.on');
+      await idle(60000).catch(() => {});
+      if (hour === 19) {
+        await page.evaluate(() => { for (const a of window.harness.agents.values()) { window.harness.send({ type: 'send', id: a.id, text: 'fire the mains' }); window.harness.send({ type: 'send', id: a.id, text: 'plate the dessert' }); } });
+        await page.waitForFunction(() => window.Office.steam() >= 4, null, { timeout: 20000 });
+        await sleep(600);
+      } else await sleep(800);
+      await page.evaluate(() => { window.harness.select(null); for (const a of window.harness.agents.values()) a.bubble = null; });
+      await shot(name);
+    }
   } finally {
     await browser.close(); srv.kill();
   }

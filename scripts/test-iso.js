@@ -403,6 +403,8 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(tk.states.includes('pending') && tk.states.includes('progress') && tk.states.includes('done'), 'pending, in-progress and done tickets are all on the rail: ' + tk.states.join(','));
     assert(tk.texts.every((s) => s.length <= 29), 'ticket prompts are truncated: ' + JSON.stringify(tk.texts));
     assert(tk.hits >= 3, 'each visible ticket has a hit box');
+    const steamy = await page.waitForFunction(() => { const open = window.harness.tickets().filter((x) => x.state !== 'done').length; return open >= 2 && window.Office.steam() === Math.min(4, open); }, null, { timeout: 5000 }).then(() => true, () => false);
+    assert(steamy, 'open tickets steam, more as the queue gets busier (up to 4 puffs each)');
     const clicked = await page.evaluate((ids) => {
       const h = window.harness.ticketHits().find((x) => x.id === ids.linus);
       return h;
@@ -536,8 +538,17 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const sc = await page.evaluate(() => { const c = document.getElementById('office'); return [c.width / window.Office.W, c.height / window.Office.H]; });
     assert(Number.isInteger(sc[0]) && sc[0] === sc[1], `canvas is scaled by an integer factor (x${sc[0]})`);
 
+    // ---- day and night service: the lighting follows the local clock, ?hour pins it ----
+    const lit = async (hour) => {
+      await page.goto(`http://localhost:${PORT}/?wander=off&hour=${hour}`); await page.waitForSelector('#conn.on'); await sleep(400);
+      return page.evaluate(() => { const c = document.getElementById('office'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2]; return { light: window.harness.light(), lum: s / (d.length / 4) }; });
+    };
+    const day = await lit(12), night = await lit(23), morning = await lit(8), evening = await lit(19);
+    assert(day.light === 'lunch' && morning.light === 'morning' && evening.light === 'evening' && night.light === 'night', `the clock picks the service: ${[morning, day, evening, night].map((x) => x.light).join(', ')}`);
+    assert(night.lum < day.lum * 0.7 && evening.lum < day.lum, `after hours the kitchen is dim (lunch ${day.lum | 0}, evening ${evening.lum | 0}, night ${night.lum | 0})`);
+
     // ---- flat view: same dining room, the runner stays in the dining aisles and never walks through a table ----
-    await page.goto(`http://localhost:${PORT}/?wander=off&view=flat`);
+    await page.goto(`http://localhost:${PORT}/?wander=off&view=flat&hour=12`);
     await page.waitForSelector('#conn.on');
     const flat = await page.evaluate(() => {
       const O = window.Office, bad = [];

@@ -21,6 +21,9 @@
     mock: ['Mock', 'simulated agent, no CLI needed'],
   };
   // demo pacing: ?slow=2 stretches walking, bubbles, handoffs and holds (used for the demo videos)
+  // ?hour=0..23 pins the kitchen clock (screenshots, tests); otherwise the lighting follows the local time
+  const HOUR = params.get('hour');
+  const lightNow = () => { const h = HOUR !== null ? +HOUR : new Date().getHours(); return h >= 22 || h < 5 ? 'night' : h < 11 ? 'morning' : h < 16 ? 'lunch' : 'evening'; };
   const TS = Math.max(0.5, Math.min(4, +params.get('slow') || 1));
   const BUBBLE_TTL = 14000 * TS;
   const NAMES = ['Ada', 'Linus', 'Grace', 'Alan', 'Margaret', 'Ken', 'Barbara', 'Dennis'];
@@ -993,7 +996,7 @@
     update(dt, now); updateHelp(now); renderAsks(); renderCookKeys();
     const closed = closedView();
     if (closed !== closedSaid) { closedSaid = closed; $('closedNote').textContent = closed ? `Kitchen closed, the plan limit ran out. ${closed}.` : ''; }
-    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now), closed, dining: (lastDining = diningView(now)) });
+    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now), closed, dining: (lastDining = diningView(now)), light: lightNow() });
     requestAnimationFrame(frame);
   }
 
@@ -1004,6 +1007,7 @@
     toolTrip,
     tickets: () => collectTickets(performance.now()),
     dining: () => lastDining,
+    light: lightNow,
     orders: () => (run ? [run.cwd] : []).concat(orders),
     ticketHits: () => (Office.ticketHits && Office.ticketHits()) || [],
     states: () => [...agents.values()].map((a) => ({ id: a.id, main: !!a.main, slot: a.slot, meet: a.away && a.mode === 'meet', dest: a.dest, name: a.name, type: a.type, state: a.state, tool: a.tool, x: a.x, y: a.y, away: a.away, mode: a.mode, act: a.act && a.act.kind, cook: a.cook || null, ask: a.ask ? a.ask.reqId : null, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1), subs: (a.subs || []).length, helping: a.help ? a.help.phase : null, home: !a.away, seated: !a.away && a.mode === 'sit' })),
