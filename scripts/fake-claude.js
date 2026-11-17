@@ -130,7 +130,8 @@ async function chatDemo() {
   await wait(step);
   const text = '## Fixed the flaky retry\n\nThe loop slept a **fixed** 100ms, so all 3 attempts ran inside ~300ms. It now backs off with `100 * 2 ** attempt`:\n\n```js\nfor (let attempt = 0; attempt < 3; attempt++) {\n  try { return await get(url); } catch (e) { last = e; }\n  await sleep(100 * 2 ** attempt);\n}\n```\n\n| attempt | wait |\n| --- | --- |\n| 1 | 100ms |\n| 2 | 200ms |\n| 3 | 400ms |\n\n- Tests: 4 passed\n- Lint: *skipped*, the eslint config is missing\n\nSee [Node test runner](https://nodejs.org/api/test.html) for the flags I used.';
   A([{ type: 'text', text }]);
-  out({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: sid, duration_ms: 48210, num_turns: 7, total_cost_usd: 0.0832 });
+  out({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: sid, duration_ms: 48210, num_turns: 7, total_cost_usd: 0.0832,
+    usage: { input_tokens: 1200, cache_creation_input_tokens: 0, cache_read_input_tokens: 17200, output_tokens: 1240 } });
 }
 
 // The older foreground shape: 4 Task calls with typed subagents, overlapping file reads, different durations, one failure.

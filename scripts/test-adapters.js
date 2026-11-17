@@ -65,6 +65,7 @@ const waitFor = async (fn, ms = 15000) => { const t = Date.now(); while (Date.no
     assert(rm && rm.msg.tid === 'c1' && rm.msg.input.file_path === 'src/index.js' && log.some((p) => p.type === 'msg_patch' && p.mid === rm.msg.mid && p.patch.status === 'ok'), 'cursor tool_call carries call id + path, completed -> ok patch');
   }
   assert(log.filter((m) => m.type === 'msg' && m.msg.role === 'assistant' && /fake cursor-agent/.test(m.msg.text)).length >= 1 || log.some((m) => m.type === 'msg_update' && /fake cursor-agent/.test(m.text)), 'cursor reply received');
+  { const m = log.find((x) => x.type === 'msg' && x.msg.role === 'meta' && x.id === ids.Cur.id); assert(m && m.msg.meta.tokensIn === 15477 && m.msg.meta.tokensOut === 25 && m.msg.meta.durationMs === 3300, 'cursor camelCase usage -> tokens in/out: ' + JSON.stringify(m && m.msg.meta)); }
 
   // resume continuity
   ws.send(JSON.stringify({ type: 'send', id: ids.Cur.id, text: 'again' }));
@@ -94,6 +95,7 @@ const waitFor = async (fn, ms = 15000) => { const t = Date.now(); while (Date.no
     assert(msgs.some((x) => x.role === 'thinking' && /backoff/.test(x.text)), 'thinking block becomes a thinking msg');
     const meta = msgs.find((x) => x.role === 'meta');
     assert(meta && meta.meta.turns === 7 && meta.meta.costUsd === 0.0832 && meta.text === 'Done in 48.2s · 7 turns · $0.0832', 'result cost/duration/turns -> meta line: ' + (meta && meta.text));
+    assert(meta && meta.meta.tokensIn === 18400 && meta.meta.tokensOut === 1240, 'claude usage -> tokens in (input + cache) and out: ' + JSON.stringify(meta && meta.meta));
     assert(msgs.filter((x) => x.role === 'tool').every((x) => x.status === 'ok' || x.status === 'error'), 'every tool msg got a result patch');
   }
   await waitFor(() => log.some((m) => m.type === 'agent' && m.agent.id === ids.Moc.id && m.agent.state === 'done'), 20000);

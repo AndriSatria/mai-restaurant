@@ -64,5 +64,5 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   if (partial) { for (const w of text.split(/(\s+)/)) { out({ type: 'assistant', timestamp_ms: Date.now(), message: { role: 'assistant', content: [{ type: 'text', text: w }] } }); await wait(15); }
     out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } }); }
   else out({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
-  out({ type: 'result', subtype: 'success', is_error: false, duration_ms: 3300, result: intro + text, session_id: sid });
+  out({ type: 'result', subtype: 'success', is_error: false, duration_ms: 3300, result: intro + text, session_id: sid, usage: { inputTokens: 5749, outputTokens: 25, cacheReadTokens: 9728, cacheWriteTokens: 0 } });
 })();

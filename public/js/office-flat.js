@@ -469,6 +469,7 @@
     R(c, x - 13, y - 5, 26, 6, '#3e7a56'); R(c, x - 13, y - 5, 26, 1, '#6aa882'); R(c, x - 13, y + 1, 26, 3, '#2f6444');
     R(c, x - 11, y + 4, 2, 5, '#4a2c18'); R(c, x + 9, y + 4, 2, 5, '#4a2c18');
     R(c, x + 8, y - 8, 2, 4, '#cfe8f4');
+    if (d.bill) slip(c, x - 12, y - 7);
     if (eating) { disc(c, x, y - 3, 3, '#f0eee8'); disc(c, x, y - 3, 2, '#fff'); if (d.served < EAT * 0.7) disc(c, x, y - 3, 1, '#c84830'); }
     if (bite) { R(c, x + 5, y - 15, 2, 6, look.shirt); R(c, x + 5, y - 17, 2, 2, look.skin); R(c, x + 6, y - 20, 1, 3, '#c8ccd4'); R(c, x - 8, y - 9, 3, 3, look.skin); }
     else { R(c, x - 8, y - 9, 3, 3, look.skin); R(c, x + 5, y - 9, 3, 3, look.skin); }
@@ -483,9 +484,34 @@
     for (const it of items.sort((a, b) => a.y - b.y)) it.draw();
   }
 
+  const dur = (ms) => ms == null ? '?' : ms < 60000 ? (ms / 1000).toFixed(1) + 's' : Math.floor(ms / 60000) + 'm ' + String(Math.round(ms / 1000) % 60).padStart(2, '0') + 's';
+  const tok = (n) => n == null ? '?' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+  /** the bill card: project, who cooked it and how long, then one row per count, on receipt paper kept inside the canvas */
+  function drawBill(ctx, name, b, cx, bottom, U, W2) {
+    const rows = [[name, ''], [b.who, dur(b.ms)], ['pantry trips', b.pantry], ['edits', b.edits], ['commands', b.commands]];
+    if (b.tokensIn != null || b.tokensOut != null) rows.push(['tokens in', tok(b.tokensIn)], ['tokens out', tok(b.tokensOut)]);
+    if (b.cost != null) rows.push(['cost', '$' + b.cost.toFixed(4)]);
+    ctx.font = `${Math.round(11 * U)}px ${FONT}`; ctx.textBaseline = 'top';
+    const lh = Math.round(14 * U), pad = Math.round(6 * U), bw2 = Math.round(2 * U), rule = Math.round(5 * U);
+    const w = Math.ceil(Math.max(...rows.map((r) => ctx.measureText(r[0] + r[1]).width)) + 16 * U) + pad * 2, h = rows.length * lh + rule + pad * 2;
+    const x = Math.round(Math.max(4, Math.min(W2 - w - 4, cx - w / 2))), y = Math.round(Math.max(4, bottom - h));
+    ctx.fillStyle = '#2b2f3b'; ctx.fillRect(x - bw2, y - bw2, w + bw2 * 2, h + bw2 * 2);
+    ctx.fillStyle = '#fffbe8'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#9a8f6a'; for (let i = x + pad; i < x + w - pad; i += 4 * U) ctx.fillRect(Math.round(i), y + pad + lh * 2 + Math.round(rule / 2) - 1, Math.round(2 * U), Math.max(1, Math.round(U)));
+    rows.forEach((r, i) => {
+      const ty = y + pad + i * lh + (i >= 2 ? rule : 0);
+      ctx.font = `${i ? '' : 'bold '}${Math.round(11 * U)}px ${FONT}`; ctx.fillStyle = '#2b2f3b';
+      ctx.textAlign = 'left'; ctx.fillText(String(r[0]), x + pad, ty);
+      ctx.textAlign = 'right'; ctx.fillText(String(r[1]), x + w - pad, ty);
+    });
+    ctx.textAlign = 'left';
+  }
+  const slip = (c, x, y) => { R(c, x, y, 5, 6, '#7a7058'); R(c, x, y, 4, 5, '#fffbe8'); R(c, x + 1, y + 1, 2, 1, '#9a8f6a'); R(c, x + 1, y + 3, 2, 1, '#9a8f6a'); };
+
   const STATE_COL = { idle: '#8b90ad', thinking: '#b7a8ff', working: '#7fd6ff', done: '#6be39b', error: '#ff6b70' };
 
   // ---------- main ----------
+  let lastBillHits = [];
   const bg = buildBackground();
   const logical = document.createElement('canvas'); logical.width = W; logical.height = H;
   const lc = logical.getContext('2d');
@@ -540,6 +566,13 @@
       if (e.bubble) drawBubble(ctx, e.bubble, px * S, (headTop - 18) * S, S, U, canvas.width);
     }
     if (scene.dining) scene.dining.tables.forEach((d, k) => pillText(ctx, d.name, TABLES[k].x * S, (TABLES[k].y + 5) * S, U * 0.8, '#f4f1e8', 'rgba(58,36,20,.9)', true));
+    lastBillHits = [];
+    if (scene.dining) scene.dining.tables.forEach((d, k) => {
+      if (!d.bill) return;
+      const { x, y } = TABLES[k];
+      lastBillHits.push({ cwd: d.cwd, x: x - 14, y: y - 9, w: 9, h: 10 });
+      if (d.open) drawBill(ctx, d.name, d.bill, (x - 10) * S, (y - 10) * S, U, canvas.width);
+    });
     for (let i = 0; i < MAX_SLOTS; i++) if (!bySlot[i] && scene.hoverSlot === i) pillText(ctx, '＋ hire', SLOTS[i].cx * S, (SLOTS[i].cy + 28) * S, U, '#0e1f1a', '#5ff2a5', true);
   }
 
@@ -571,8 +604,8 @@
     drawHead(c, 10, 8, look, { mood: 'happy', hat: main ? 'toque' : 'cap' });
   }
 
-  window.OfficeFlat = { W, H, SLOTS, MAX_SLOTS, MGR: SLOTS.length - 1, render, hitTest, walkPath, SPOTS, drawAvatar, COFFEE, AISLE, TABLES, runnerAt,
+  window.OfficeFlat = { W, H, SLOTS, MAX_SLOTS, MGR: SLOTS.length - 1, render, hitTest, walkPath, SPOTS, drawAvatar, COFFEE, AISLE, TABLES, runnerAt, billHits: () => lastBillHits,
     SPEED: 40, STEP: 0.5, // walking speed in world units/s (px here) and canvas scale step
     // helpers re-used by the isometric renderer
-    shared: { R, shade, rnd, disc, line, bmp, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, dashedRect, legAt, dinerLook, RUNNER, EAT } };
+    shared: { R, shade, rnd, disc, line, bmp, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, dashedRect, legAt, dinerLook, RUNNER, EAT, drawBill, slip } };
 })();

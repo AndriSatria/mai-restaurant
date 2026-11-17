@@ -14,6 +14,9 @@
 //   kitchen-12-flat-dining.png  the same dining room in the flat (?view=flat) view
 //   kitchen-13-seven-tables.png seven projects: the seventh table wraps into a fourth row
 //   kitchen-14-hands-to-lead.png kitchen hands' dishes go to the lead's table while the lead is still working
+//   kitchen-15-bill.png      each finished run leaves a receipt on its table
+//   kitchen-16-bill-details.png  hovering a receipt: time, pantry trips, edits, commands, tokens and cost (Claude reports them)
+//   kitchen-17-flat-bill.png the flat view with a receipt clicked open
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -48,6 +51,10 @@ const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d
     await page.evaluate((n) => { const a = [...window.harness.agents.values()].find((x) => x.name === n); window.harness.select(a.id); }, name);
     await page.fill('#input', text); await page.press('#input', 'Enter');
   };
+  const slipPoint = (table) => page.evaluate((n) => {
+    const d = window.harness.dining().tables.find((t) => t.name === n), h = window.Office.billHits().find((x) => x.cwd === d.cwd), r = document.getElementById('office').getBoundingClientRect();
+    return [r.left + (h.x + h.w / 2) / window.Office.W * r.width, r.top + (h.y + h.h / 2) / window.Office.H * r.height];
+  }, table);
   const idle = (ms = 30000) => page.waitForFunction(() => window.harness.states().every((a) => !a.away && !a.act && (a.state === 'idle' || a.state === 'done')), null, { timeout: ms });
 
   try {
@@ -251,18 +258,34 @@ const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d
     await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
     await shot('kitchen-11-dining.png');
 
+    // 15 + 16: Grace's Claude run lands on the mai-office table with its receipt; hovering it shows the bill
+    await sendTo('Grace', 'fix the flaky retry');
+    await page.evaluate(() => window.harness.select(null));
+    await page.waitForFunction(() => window.harness.dining().tables.some((t) => t.name === 'mai-office' && t.bill && t.bill.cost != null && t.served != null && t.served < 4), null, { timeout: 90000 });
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
+    await shot('kitchen-15-bill.png');
+    const [bx, by] = await slipPoint('mai-office');
+    await page.mouse.move(bx, by); await sleep(300);
+    await shot('kitchen-16-bill-details.png');
+    await page.mouse.move(5, 5);
+
     // 12: flat view: Margaret's plate is on the menu-site table, the runner carries Ken's
     await page.goto(`http://localhost:${PORT}/?wander=off&view=flat`);
     await page.waitForSelector('#conn.on');
     await idle(40000).catch(() => {});
-    await sendTo('Margaret', 'hello');
+    await sendTo('Margaret', 'stir the reduction');
     await page.evaluate(() => window.harness.select(null));
     await page.waitForFunction(() => window.harness.dining().tables.some((t) => t.name === 'menu-site' && t.served != null && t.served < 3), null, { timeout: 60000 });
-    await sendTo('Ken', 'hello');
+    await sendTo('Ken', 'browse the stock list');
     await page.evaluate(() => window.harness.select(null));
     await page.waitForFunction(() => { const r = window.harness.dining().runner; return r && r.carry && r.y < 150; }, null, { timeout: 60000 });
     await page.evaluate(() => { for (const a of window.harness.agents.values()) a.bubble = null; });
     await shot('kitchen-12-flat-dining.png');
+    // 17: Margaret's receipt clicked open stays open after the mouse leaves
+    await page.waitForFunction(() => !window.harness.dining().runner, null, { timeout: 60000 });
+    const [fx, fy] = await slipPoint('menu-site');
+    await page.mouse.click(fx, fy); await page.mouse.move(5, 5); await sleep(300);
+    await shot('kitchen-17-flat-bill.png');
 
     // 13: seven cooks on seven projects: the seventh table goes into a fourth row
     await page.goto(`http://localhost:${PORT}/?wander=off`);

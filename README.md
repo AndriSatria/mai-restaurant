@@ -43,6 +43,7 @@ Every message you send runs the real CLI in print mode (`claude -p` or `agent -p
 | A run fails | The cook's stock pot boils over for a few seconds. |
 | A shell command fails | A small fire flares up on the stove. |
 | A run finishes | The runner takes the plate from the pass to that project's table in the dining room. Each project folder gets a table and a diner, two tables to a row. A kitchen hand's dish goes to the lead's table. The flat view (`?view=flat`) has the same dining room. |
+| The plate reaches the table | A receipt stays next to it. Hover it to see how long the run took, pantry trips, edits and commands, and tokens and cost when the CLI reports them (Claude Code reports both, Cursor only tokens). Click it to keep it open. |
 
 The first person you hire stands at the pass as head chef (tall toque). Up to 7 people fit in the kitchen: 6 cook stations and the pass.
 

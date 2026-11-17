@@ -492,6 +492,19 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(din.names.length === din.cwds && new Set(din.names).size === din.cwds, `one dining table per project (${din.names.join(', ')}), and Linus's finished task reached the /tmp table`);
     assert(await page.evaluate(() => window.Office.TABLES.length >= window.Office.MAX_SLOTS), 'a table for every station, so seven projects wrap into a fourth row');
 
+    // ---- the bill: the finished run leaves a receipt at its table; hovering shows the details, a click pins them ----
+    const bill = await page.evaluate(() => window.harness.dining().tables.find((t) => t.name === 'tmp').bill);
+    assert(bill && bill.who && bill.ms > 0 && ['pantry', 'edits', 'commands'].every((k) => Number.isInteger(bill[k])), 'a receipt with duration and tool counts lands on the /tmp table: ' + JSON.stringify(bill));
+    const slipAt = await page.evaluate(() => { const h = window.Office.billHits().find((x) => x.cwd === '/tmp'), r = document.getElementById('office').getBoundingClientRect(); return h && [r.left + (h.x + h.w / 2) / window.Office.W * r.width, r.top + (h.y + h.h / 2) / window.Office.H * r.height]; });
+    const billOpen = () => page.evaluate(() => window.harness.dining().tables.find((t) => t.name === 'tmp').open);
+    await page.mouse.move(slipAt[0], slipAt[1]); await sleep(150);
+    const hovered = await billOpen();
+    await page.mouse.click(slipAt[0], slipAt[1]); await page.mouse.move(5, 5); await sleep(150);
+    const pinned = await billOpen();
+    const corner = await page.evaluate(() => { const r = document.getElementById('office').getBoundingClientRect(); return [r.left + 5, r.top + 5]; });   // outside the room: no cook, no empty station
+    await page.mouse.click(corner[0], corner[1]); await page.mouse.move(5, 5); await sleep(150);
+    assert(hovered && pinned && !(await billOpen()), `hovering the receipt opens the bill (${hovered}), a click keeps it open (${pinned}), a click elsewhere closes it`);
+
     // ---- chat panel: Claude Code style formatting stays safe (model text is never parsed as HTML) ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);
     await page.waitForFunction(() => !document.getElementById('stopBtn').offsetParent, null, { timeout: 30000 }).catch(() => {});
@@ -542,7 +555,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     assert(flat.flat && flat.tables && !flat.bad.length, 'flat view has the dining room: a table per station, runner trips stay in the aisles ' + JSON.stringify(flat.bad));
     await page.evaluate((id) => window.harness.send({ type: 'send', id, text: 'hello' }), burnId);
     await page.waitForFunction(() => { const t = window.harness.dining().tables.find((x) => x.name === 'tmp'); return t && t.served != null && t.served < 2; }, null, { timeout: 40000 });
-    assert(true, 'flat view: a finished task is served to its project table');
+    assert(await page.evaluate(() => window.Office.billHits().some((h) => h.cwd === '/tmp')), 'flat view: a finished task is served to its project table with its receipt');
   } finally {
     await browser.close(); srv.kill('SIGTERM');
   }

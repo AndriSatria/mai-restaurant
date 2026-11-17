@@ -83,7 +83,7 @@
           Object.assign(a, agent); slotMoved(a, prevSlot);
           if (prev !== a.state && a.state === 'thinking') a.bubble = null;
           if (prev !== a.state && a.state === 'error') a.errAt = performance.now();   // the pot boils over
-          if (prev !== a.state && a.state === 'done') order(a.cwd);
+          if (prev !== a.state && a.state === 'done') { due.set(a.cwd, billOf(a)); order(a.cwd); }
           syncHelp(a, false);
         }
         if (a.id === selectedId) updateHead();
@@ -525,10 +525,25 @@
     if (run) {
       runner = Office.runnerAt(run.k, (now - run.t0) / 1000 / TS);
       if (!runner) run = null;
-      else if (runner.served && !run.served) { run.served = true; servedAt.set(run.cwd, now); }
+      else if (runner.served && !run.served) { run.served = true; servedAt.set(run.cwd, now); if (due.has(run.cwd)) bills.set(run.cwd, due.get(run.cwd)); }
     }
-    return { tables: list.map((cwd) => ({ name: String(cwd).split(/[\\/]/).filter(Boolean).pop() || String(cwd), served: servedAt.has(cwd) ? (now - servedAt.get(cwd)) / 1000 / TS : null })), runner };
+    const open = billPinned || billHover;
+    return { tables: list.map((cwd) => ({ cwd, name: String(cwd).split(/[\\/]/).filter(Boolean).pop() || String(cwd), served: servedAt.has(cwd) ? (now - servedAt.get(cwd)) / 1000 / TS : null,
+      bill: bills.get(cwd) || null, open: open === cwd })), runner };
   }
+  // the bill: duration, tool trips by kind and the CLI's usage for the run that just finished; it lands on the table with the plate
+  const due = new Map(), bills = new Map();
+  let billHover = null, billPinned = null;
+  const BILL_KIND = { pantry: 'pantry', chop: 'edits', stove: 'commands', bell: 'commands' };
+  function billOf(a) {
+    const tr = a.transcript; let i = tr.length - 1;
+    while (i >= 0 && tr[i].role !== 'user') i--;
+    const run = tr.slice(i + 1), meta = (run.find((m) => m.role === 'meta') || {}).meta || {};
+    const b = { who: a.name, ms: meta.durationMs != null ? meta.durationMs : i >= 0 ? Date.now() - tr[i].ts : null, pantry: 0, edits: 0, commands: 0, tokensIn: meta.tokensIn, tokensOut: meta.tokensOut, cost: meta.costUsd };
+    for (const m of run) { const k = m.role === 'tool' && BILL_KIND[toolTrip(m.tool, m.text)]; if (k) b[k]++; }
+    return b;
+  }
+  const hitBill = (lx, ly) => ((Office.billHits && Office.billHits()) || []).find((h) => lx >= h.x && lx <= h.x + h.w && ly >= h.y && ly <= h.y + h.h) || null;
   let lastDining = null;
   const flightsView = (now) => flights.map((f) => ({ kind: f.kind, pid: f.pid, hid: f.hid, toId: f.toId, ok: f.ok, p: (now - f.t0) / f.dur }));
 
@@ -652,10 +667,11 @@
   }
   canvas.addEventListener('mousemove', (ev) => {
     const [x, y] = toLogical(ev);
-    const tk = hitTicket(x, y);
+    const tk = hitTicket(x, y), bl = hitBill(x, y);
     const h = tk ? { id: tk.id } : Office.hitTest(x, y, entries());
     hoverId = h && h.id || null; hoverSlot = h && h.slot !== undefined && agents.size < Office.MAX_SLOTS ? h.slot : null;
-    canvas.style.cursor = h ? 'pointer' : 'default';
+    billHover = bl && bl.cwd;
+    canvas.style.cursor = h || bl ? 'pointer' : 'default';
     canvas.title = tk ? (tk.name + ' · ' + tk.state) : (hoverId ? tooltip(agents.get(hoverId)) : '');
   });
   function tooltip(a) {
@@ -666,9 +682,12 @@
     if (h.peer && performance.now() < h.peer.until) { const o = agents.get(h.peer.withId); t += `\ncomparing notes with ${o ? o.name : 'a colleague'} (inferred: ${h.peer.why})`; }
     return t;
   }
-  canvas.addEventListener('mouseleave', () => { hoverId = null; hoverSlot = null; });
+  canvas.addEventListener('mouseleave', () => { hoverId = null; hoverSlot = null; billHover = null; });
   canvas.addEventListener('click', (ev) => {
     const [x, y] = toLogical(ev);
+    const bl = hitBill(x, y);
+    billPinned = bl && bl.cwd !== billPinned ? bl.cwd : null;
+    if (bl) return;
     const tk = hitTicket(x, y);
     if (tk) { select(tk.id); return; }
     const h = Office.hitTest(x, y, entries());

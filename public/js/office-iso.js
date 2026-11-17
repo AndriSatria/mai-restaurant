@@ -11,7 +11,7 @@
 (function () {
   'use strict';
   const F = window.OfficeFlat;
-  const { R, shade, rnd, disc, line, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, legAt, dinerLook, RUNNER, EAT } = F.shared;
+  const { R, shade, rnd, disc, line, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, legAt, dinerLook, RUNNER, EAT, drawBill, slip } = F.shared;
 
   const W = 464, H = 296, OX = 200, OY = 62, GX = 16, GY = 12, WH = 56;   // kitchen floor is x 0..12; x 12..16 is the dining room
   const SEAT = 8, DESKZ = 13, MAX_SLOTS = 7, MGR = 6, SPEED = 2.6; // SPEED in tiles/second; slot 6 = the pass (head chef)
@@ -996,12 +996,14 @@
     sc.setTransform(1, 0, 0, 1, 0, 0);
     blit(c, sx(d.x, d.y), sy(d.x, d.y, 0), true);
   }
-  function drawDinTable(c, tb, served) {
+  const slipAt = (tb) => A(tb.x - 0.12, tb.y + 0.2, 12);
+  function drawDinTable(c, tb, served, bill) {
     const { x, y } = tb;
     box(c, x - 0.22, y - 0.22, x + 0.22, y + 0.22, 0, 1, WOOD);
     box(c, x - 0.06, y - 0.06, x + 0.06, y + 0.06, 1, 8, WOOD);
     box(c, x - 0.35, y - 0.35, x + 0.35, y + 0.35, 8, 12, CLOTH);
     const g = A(x + 0.22, y - 0.2, 12); R(c, g[0] - 1, g[1] - 4, 2, 4, '#cfe8f4');
+    if (bill) { const p = slipAt(tb); slip(c, p[0] - 2, p[1] - 4); }
     if (served != null && served < EAT) {
       const p = A(x, y - 0.12, 12);
       disc(c, p[0], p[1], 4, '#f0eee8'); disc(c, p[0], p[1], 3, '#fff');
@@ -1018,7 +1020,7 @@
     dining.tables.forEach((d, k) => {
       const tb = TABLES[k], dn = tb.diner, look = dinerLook(d.name), eating = d.served != null && d.served < EAT;
       objs.push({ x0: dn.x - 0.22, y0: dn.y - 0.32, x1: dn.x + 0.22, y1: dn.y + 0.12, h: 34, pad: 8, ord: 1, tag: 'diner' + k, draw: (c) => renderDiner(c, tb, look, t, k * 0.37, eating), hit: null });
-      objs.push({ x0: tb.x - 0.35, y0: tb.y - 0.35, x1: tb.x + 0.35, y1: tb.y + 0.35, h: 12, pad: 2, ord: 0, tag: 'dtable' + k, draw: (c) => drawDinTable(c, tb, d.served), hit: null });
+      objs.push({ x0: tb.x - 0.35, y0: tb.y - 0.35, x1: tb.x + 0.35, y1: tb.y + 0.35, h: 12, pad: 2, ord: 0, tag: 'dtable' + k, draw: (c) => drawDinTable(c, tb, d.served, d.bill), hit: null });
     });
     const r = dining.runner || RHOME;
     const e = { id: 'runner', look: RUNNER, x: r.x, y: r.y, face: r.face, away: true, mode: r.walk ? 'walk' : 'sit', carry: r.carry ? 'ok' : null, phase: 0.5, state: 'idle', slot: -1 };
@@ -1168,7 +1170,7 @@
   }
 
   // ---------- main ----------
-  let lastTicketHits = [];
+  let lastTicketHits = [], lastBillHits = [];
   const bg = buildBackground();
   const logical = mk(W, H), lc = logical.getContext('2d');
   const labelPt = (e) => { const s = SLOTS[e.slot !== undefined ? e.slot : e.i]; return [sx(s.lab.x, s.lab.y), sy(s.lab.x, s.lab.y, 0) + 6]; };
@@ -1304,6 +1306,14 @@
       // (speech bubbles are drawn after the loop so overlapping ones can be stacked)
     }
     if (scene.dining) scene.dining.tables.forEach((d, k) => { const tb = TABLES[k]; pillText(ctx, d.name, sx(tb.x + 0.35, tb.y + 0.35) * S, sy(tb.x + 0.35, tb.y + 0.35, 0) * S, U * 0.8, '#f4f1e8', 'rgba(58,36,20,.9)', true); });
+    lastBillHits = [];
+    let bill = null;
+    if (scene.dining) scene.dining.tables.forEach((d, k) => {
+      if (!d.bill) return;
+      const p = slipAt(TABLES[k]);
+      lastBillHits.push({ cwd: d.cwd, x: p[0] - 4, y: p[1] - 6, w: 9, h: 10 });
+      if (d.open) bill = () => drawBill(ctx, d.name, d.bill, p[0] * S, (p[1] - 8) * S, U, canvas.width);
+    });
     const bubs = [];
     for (const e of entries) { const bub = e.help && e.help.say ? e.help.say : e.bubble; if (bub) bubs.push({ e, bub, p: personAnchor(e), w: Math.min(Math.max(120 * U, 46 * S) + 12 * U, bub.length * 6.6 * U + 14 * U) }); }
     if (plan) {
@@ -1360,6 +1370,7 @@
       }
     }
     lastTicketHits = tHits;
+    if (bill) bill();
   }
 
   /** logical-pixel hit test: front-most object first (same order as drawing). -> {id} | {slot} | null */
@@ -1370,7 +1381,7 @@
   }
 
   window.OfficeIso = {
-    W, H, SLOTS, MAX_SLOTS, render, hitTest, ticketHits: () => lastTicketHits, walkPath, SPOTS, SPEED, STEP: 1,
+    W, H, SLOTS, MAX_SLOTS, render, hitTest, ticketHits: () => lastTicketHits, billHits: () => lastBillHits, walkPath, SPOTS, SPEED, STEP: 1,
     drawAvatar: F.drawAvatar, GX, GY, isBlocked, project: (x, y, z) => [sx(x, y), sy(x, y, z || 0)],
     deskPoint: (slot) => { const s = SLOTS[slot]; return [sx(s.desk.x, s.desk.y), sy(s.desk.x, s.desk.y, DESKZ)]; },
     TABLES, runnerAt, TABLE, SEATS, MGR, MD, COUNTER, PLANTS, SETS, HEAT, stationSet, tablePoint: () => [sx(TABLE.x, TABLE.y), sy(TABLE.x, TABLE.y, TABLE.h)],
