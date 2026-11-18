@@ -979,6 +979,24 @@
     }
   }
 
+  // staff board: the views draw the chalkboard, these real buttons sit over its rows (one per cook, in station order)
+  const doing = (a) => a.ask ? 'asks: ' + a.ask.tool : a.help ? 'helping ' + a.help.parentName : a.state === 'working' ? a.tool || 'cooking…' : a.away && a.mode === 'rest' ? 'resting' : a.state;
+  const staffView = () => [...agents.values()].sort((p, q) => p.slot - q.slot).map((a) => ({ id: a.id, name: a.name, type: (TYPE_INFO[a.type] || [a.type])[0], doing: doing(a), state: a.state, sel: a.id === selectedId }));
+  let staffSig = '';
+  function placeStaff() {
+    const B = Office.BOARD, k = S / U, rh = B.h / 8, box = $('staffBoard');
+    Object.assign(box.style, { left: canvas.offsetLeft + B.x * k + 'px', top: canvas.offsetTop + (B.y + rh) * k + 'px', width: B.w * k + 'px' });
+    box.style.setProperty('--row', rh * k + 'px');
+  }
+  function renderStaff(rows) {
+    const box = $('staffBoard'), sig = rows.map((r) => r.id).join('|');
+    if (sig !== staffSig) {
+      staffSig = sig; box.textContent = '';
+      for (const r of rows) { const b = document.createElement('button'); b.type = 'button'; b.addEventListener('click', () => select(r.id)); box.append(b); }
+    }
+    rows.forEach((r, i) => { const t = `Open ${r.name}'s chat: ${r.type}, ${r.doing}`; if (box.children[i].textContent !== t) box.children[i].textContent = t; });
+  }
+
   // ---------- main loop ----------
   function resize() {
     const stage = $('stage'); const dpr = window.devicePixelRatio || 1;
@@ -988,15 +1006,17 @@
     S = Math.max(1, Math.floor(Math.min(aw / Office.W, ah / Office.H) * step) / step); U = dpr;
     canvas.width = Math.round(Office.W * S); canvas.height = Math.round(Office.H * S);
     canvas.style.width = (canvas.width / dpr) + 'px'; canvas.style.height = (canvas.height / dpr) + 'px';
+    placeStaff();
   }
   window.addEventListener('resize', resize);
   let last = performance.now(), closedSaid = null;
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     update(dt, now); updateHelp(now); renderAsks(); renderCookKeys();
+    const staff = staffView(); renderStaff(staff);
     const closed = closedView();
     if (closed !== closedSaid) { closedSaid = closed; $('closedNote').textContent = closed ? `Kitchen closed, the plan limit ran out. ${closed}.` : ''; }
-    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now), closed, dining: (lastDining = diningView(now)), light: lightNow() });
+    Office.render(canvas, S, U, { slow: TS, t: now / 1000, entries: entries(), selectedId, hoverId, hoverSlot, flights: flightsView(now), plan: planView(now), tickets: collectTickets(now), closed, dining: (lastDining = diningView(now)), light: lightNow(), staff });
     requestAnimationFrame(frame);
   }
 
@@ -1008,6 +1028,7 @@
     tickets: () => collectTickets(performance.now()),
     dining: () => lastDining,
     light: lightNow,
+    staff: staffView,
     orders: () => (run ? [run.cwd] : []).concat(orders),
     ticketHits: () => (Office.ticketHits && Office.ticketHits()) || [],
     states: () => [...agents.values()].map((a) => ({ id: a.id, main: !!a.main, slot: a.slot, meet: a.away && a.mode === 'meet', dest: a.dest, name: a.name, type: a.type, state: a.state, tool: a.tool, x: a.x, y: a.y, away: a.away, mode: a.mode, act: a.act && a.act.kind, cook: a.cook || null, ask: a.ask ? a.ask.reqId : null, carry: a.dest === 'serve' && (a.mode === 'serve' || a.dir === 1), subs: (a.subs || []).length, helping: a.help ? a.help.phase : null, home: !a.away, seated: !a.away && a.mode === 'sit' })),

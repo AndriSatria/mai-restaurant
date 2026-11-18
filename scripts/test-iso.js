@@ -466,6 +466,16 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const hidden = await page.evaluate(() => document.getElementById('cookKeys').getBoundingClientRect().width <= 1);
     assert(hidden, 'the cook buttons hide again once focus leaves them');
     await page.evaluate(() => window.harness.select(null));
+
+    // ---- staff board: a row per cook with its CLI and what it is doing; the rows are real buttons that open the chat ----
+    const staff = await page.evaluate(() => ({ rows: window.harness.staff(), btns: [...document.querySelectorAll('#staffBoard button')].map((b) => { const r = b.getBoundingClientRect(); return { text: b.textContent, tab: b.tabIndex, x: r.left + r.width / 2, y: r.top + r.height / 2, h: r.height }; }) }));
+    assert(staff.rows.length === 5 && staff.btns.length === 5 && staff.rows.every((r, i) => r.type && r.doing && staff.btns[i].text === `Open ${r.name}'s chat: ${r.type}, ${r.doing}` && staff.btns[i].tab === 0 && staff.btns[i].h > 5),
+      'the staff board lists every cook with its CLI and current job, as focusable buttons: ' + staff.btns.map((b) => b.text).join(' | '));
+    await page.mouse.click(staff.btns[1].x, staff.btns[1].y);
+    const boardPick = await page.evaluate(() => window.harness.selected);
+    await page.focus('#staffBoard button'); await page.keyboard.press('Enter');
+    assert(boardPick === staff.rows[1].id && (await page.evaluate(() => window.harness.selected)) === staff.rows[0].id, 'clicking a name on the board, or Enter on it, opens that cook\'s chat');
+    await page.evaluate(() => window.harness.select(null));
     const burnId = await page.evaluate(() => { const a = [...window.harness.agents.values()].find((x) => x.name === 'Linus'); window.harness.send({ type: 'send', id: a.id, text: 'burn the toast' }); return a.id; });
     await page.waitForFunction((id) => window.harness.agents.get(id).fireAt > 0, burnId, { timeout: 15000 });
     assert(true, 'a failed Bash call sets the stove on fire');
@@ -506,6 +516,11 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
     const corner = await page.evaluate(() => { const r = document.getElementById('office').getBoundingClientRect(); return [r.left + 5, r.top + 5]; });   // outside the room: no cook, no empty station
     await page.mouse.click(corner[0], corner[1]); await page.mouse.move(5, 5); await sleep(150);
     assert(hovered && pinned && !(await billOpen()), `hovering the receipt opens the bill (${hovered}), a click keeps it open (${pinned}), a click elsewhere closes it`);
+    const clear = await page.evaluate(() => {
+      const O = window.Office, B = O.BOARD, hit = (h) => h.x < B.x + B.w && h.x + h.w > B.x && h.y < B.y + B.h && h.y + h.h > B.y;
+      return B.x + B.w < Math.min(O.project(O.MD.x0, O.MD.y1)[0], O.project(12, O.GY)[0]) && !O.ticketHits().some(hit) && !O.billHits().some(hit) && O.billHits().length > 0;
+    });
+    assert(clear, 'the staff board stays clear of the pass, the tickets, the dining room and the receipts');
 
     // ---- chat panel: Claude Code style formatting stays safe (model text is never parsed as HTML) ----
     await page.evaluate((id) => window.harness.select(id), ids0.Grace);
@@ -564,6 +579,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exitCode
       return { flat: O === window.OfficeFlat, tables: O.TABLES.length >= O.MAX_SLOTS, bad: bad.slice(0, 5) };
     });
     assert(flat.flat && flat.tables && !flat.bad.length, 'flat view has the dining room: a table per station, runner trips stay in the aisles ' + JSON.stringify(flat.bad));
+    assert(await page.evaluate(() => { const B = window.Office.BOARD; return B.y + B.h <= 40 && B.x + B.w < 326 && document.querySelectorAll('#staffBoard button').length === window.harness.agents.size; }), 'flat view: the staff board hangs on the wall, left of the pass and dining room, a button per cook');
     await page.evaluate((id) => window.harness.send({ type: 'send', id, text: 'hello' }), burnId);
     await page.waitForFunction(() => { const t = window.harness.dining().tables.find((x) => x.name === 'tmp'); return t && t.served != null && t.served < 2; }, null, { timeout: 40000 });
     assert(await page.evaluate(() => window.Office.billHits().some((h) => h.cwd === '/tmp')), 'flat view: a finished task is served to its project table with its receipt');

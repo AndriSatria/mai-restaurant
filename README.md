@@ -46,6 +46,7 @@ Every message you send runs the real CLI in print mode (`claude -p` or `agent -p
 | The plate reaches the table | A receipt stays next to it. Hover it to see how long the run took, pantry trips, edits and commands, and tokens and cost when the CLI reports them (Claude Code reports both, Cursor only tokens). Click it to keep it open. |
 | Orders pile up | Tickets on the pass steam, more as the queue gets busier. |
 | The time of day | The kitchen lighting follows your local clock: soft morning light (5:00 to 11:00), full light for the lunch rush (until 16:00), a warm evening (until 22:00) and a dim after-hours look. `?hour=23` pins the clock. |
+| Who's doing what | A chalkboard on the wall lists every cook, whether it runs Claude Code or Cursor, and what it's doing now. Click a name (or Tab to it and press Enter) to open that cook's chat. Both views have it. |
 
 The first person you hire stands at the pass as head chef (tall toque). Up to 7 people fit in the kitchen: 6 cook stations and the pass.
 

@@ -20,6 +20,9 @@
 //   kitchen-18-morning.png   ?hour=8: soft morning light (every other shot pins ?hour=12, the lunch rush)
 //   kitchen-19-evening.png   ?hour=19: warm evening light, a busy queue steaming on the pass
 //   kitchen-20-after-hours.png ?hour=23: the dim after-hours kitchen
+//   kitchen-21-staff-board.png  the staff board on the wall: each cook, Claude Code or Cursor, and what they are doing
+//   kitchen-22-flat-staff-board.png the same board in the flat view
+//   kitchen-23-board-chat.png   a name clicked on the board opens that cook's chat
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -324,6 +327,35 @@ const PROJ = Object.fromEntries(['bistro-api', 'menu-site'].map((n) => { const d
       await page.evaluate(() => { window.harness.select(null); for (const a of window.harness.agents.values()) a.bubble = null; });
       await shot(name);
     }
+
+    // 21-23: staff board with Claude Code and Cursor cooks at work, in both views; then a click on a board name
+    await page.evaluate(() => { for (const a of window.harness.agents.values()) window.harness.send({ type: 'fire', id: a.id }); });
+    await page.waitForFunction(() => window.harness.agents.size === 0);
+    for (const [name, type, cwd] of [['Ada', 'claude', ROOT], ['Linus', 'cursor', ROOT], ['Grace', 'claude', ROOT], ['Ken', 'cursor', PROJ['bistro-api']], ['Margaret', 'claude', PROJ['menu-site']], ['Alan', 'cursor', PROJ['bistro-api']]]) {
+      await page.evaluate(([n, t, c]) => window.harness.send({ type: 'hire', name: n, cwd: c, agentType: t }), [name, type, cwd]);
+      await page.waitForFunction((n) => window.harness.states().some((a) => a.name === n), name);
+      await sleep(150);
+    }
+    const busyBoard = async () => {
+      await idle(60000).catch(() => {});
+      await page.evaluate(() => { for (const a of window.harness.agents.values()) if (a.name !== 'Margaret') window.harness.send({ type: 'send', id: a.id, text: 'read the menu and fix the specials page' }); });
+      await page.waitForFunction(() => window.harness.staff().filter((r) => r.state === 'working').length >= 3, null, { timeout: 30000 });
+      await page.evaluate(() => { window.harness.select(null); for (const a of window.harness.agents.values()) a.bubble = null; });
+    };
+    await page.goto(`http://localhost:${PORT}/?wander=off&hour=12`);
+    await page.waitForSelector('#conn.on');
+    await busyBoard();
+    await shot('kitchen-21-staff-board.png');
+    await page.goto(`http://localhost:${PORT}/?wander=off&view=flat&hour=12`);
+    await page.waitForSelector('#conn.on');
+    await busyBoard();
+    await shot('kitchen-22-flat-staff-board.png');
+    await page.goto(`http://localhost:${PORT}/?wander=off&hour=12`);
+    await page.waitForSelector('#conn.on');
+    await idle(60000).catch(() => {});
+    const row = await page.evaluate(() => { const b = document.querySelectorAll('#staffBoard button')[0].getBoundingClientRect(); return [b.left + 30, b.top + b.height / 2]; });
+    await page.mouse.click(row[0], row[1]); await sleep(600);
+    await shot('kitchen-23-board-chat.png');
   } finally {
     await browser.close(); srv.kill();
   }

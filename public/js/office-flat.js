@@ -506,6 +506,25 @@
     });
     ctx.textAlign = 'left';
   }
+  // staff board: a chalkboard filling B (logical px), a title row and one row per cook; app.js lays its buttons over the same rows
+  function drawStaff(ctx, B, rows, S, U) {
+    const x = Math.round(B.x * S), y = Math.round(B.y * S), w = Math.round(B.w * S), h = Math.round(B.h * S), rh = h / 8, fr = Math.round(3 * U), pad = Math.round(5 * U);
+    ctx.fillStyle = '#5b3a1e'; ctx.fillRect(x - fr, y - fr, w + fr * 2, h + fr * 2);
+    ctx.fillStyle = '#26332c'; ctx.fillRect(x, y, w, h);
+    const px = Math.min(Math.round(11 * U), Math.floor(rh * 0.72));
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    const fit = (t, max) => { t = String(t); if (ctx.measureText(t).width <= max) return t; while (t && ctx.measureText(t + '…').width > max) t = t.slice(0, -1); return t + '…'; };
+    ctx.font = `bold ${px}px ${FONT}`; ctx.fillStyle = '#ffd84a'; ctx.fillText('STAFF', x + pad, y + rh / 2);
+    const col = (k, bold) => { ctx.font = `${bold}${px}px ${FONT}`; return Math.max(0, ...rows.map((r) => ctx.measureText(r[k]).width)) + pad * 2; };
+    const c1 = x + pad + px, c2 = Math.min(c1 + col('name', 'bold '), x + w * 0.4), c3 = Math.min(c2 + col('type', ''), x + w * 0.66);
+    rows.forEach((r, i) => {
+      const ty = y + rh * (i + 1.5);
+      ctx.fillStyle = STATE_COL[r.state] || '#999'; ctx.fillRect(x + pad, Math.round(ty - px * 0.25), Math.round(px * 0.5), Math.round(px * 0.5));
+      ctx.font = `bold ${px}px ${FONT}`; ctx.fillStyle = r.sel ? '#ffd84a' : '#f4f1e8'; ctx.fillText(fit(r.name, c2 - c1 - pad), c1, ty);
+      ctx.font = `${px}px ${FONT}`; ctx.fillStyle = '#a8c0b0'; ctx.fillText(fit(r.type, c3 - c2 - pad), c2, ty);
+      ctx.fillStyle = '#f4f1e8'; ctx.fillText(fit(r.doing, x + w - pad - c3), c3, ty);
+    });
+  }
   const slip = (c, x, y) => { R(c, x, y, 5, 6, '#7a7058'); R(c, x, y, 4, 5, '#fffbe8'); R(c, x + 1, y + 1, 2, 1, '#9a8f6a'); R(c, x + 1, y + 3, 2, 1, '#9a8f6a'); };
 
   // kitchen lighting by the local clock, tinting only drawn pixels; the lunch rush gets plain full light
@@ -520,6 +539,7 @@
 
   // ---------- main ----------
   let lastBillHits = [];
+  const BOARD = { x: 64, y: 1, w: 130, h: 38 };   // on the wall, over the middle window
   const bg = buildBackground();
   const logical = document.createElement('canvas'); logical.width = W; logical.height = H;
   const lc = logical.getContext('2d');
@@ -552,6 +572,7 @@
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(logical, 0, 0, W * S, H * S);
+    if (scene.staff) drawStaff(ctx, BOARD, scene.staff, S, U);
 
     // overlays
     for (const e of scene.entries) {
@@ -613,8 +634,8 @@
     drawHead(c, 10, 8, look, { mood: 'happy', hat: main ? 'toque' : 'cap' });
   }
 
-  window.OfficeFlat = { W, H, SLOTS, MAX_SLOTS, MGR: SLOTS.length - 1, render, hitTest, walkPath, SPOTS, drawAvatar, COFFEE, AISLE, TABLES, runnerAt, billHits: () => lastBillHits,
+  window.OfficeFlat = { W, H, SLOTS, MAX_SLOTS, MGR: SLOTS.length - 1, render, hitTest, walkPath, SPOTS, drawAvatar, COFFEE, AISLE, TABLES, runnerAt, billHits: () => lastBillHits, BOARD,
     SPEED: 40, STEP: 0.5, // walking speed in world units/s (px here) and canvas scale step
     // helpers re-used by the isometric renderer
-    shared: { R, shade, rnd, disc, line, bmp, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, dashedRect, legAt, dinerLook, RUNNER, EAT, drawBill, slip, lighting } };
+    shared: { R, shade, rnd, disc, line, bmp, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, dashedRect, legAt, dinerLook, RUNNER, EAT, drawBill, slip, lighting, drawStaff } };
 })();

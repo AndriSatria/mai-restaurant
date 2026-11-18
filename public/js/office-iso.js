@@ -11,7 +11,7 @@
 (function () {
   'use strict';
   const F = window.OfficeFlat;
-  const { R, shade, rnd, disc, line, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, legAt, dinerLook, RUNNER, EAT, drawBill, slip, lighting } = F.shared;
+  const { R, shade, rnd, disc, line, stateIcon, drawTalk, pillText, measurePill, drawBubble, TYPE_BADGE, STATE_COL, legAt, dinerLook, RUNNER, EAT, drawBill, slip, lighting, drawStaff } = F.shared;
 
   const W = 464, H = 296, OX = 200, OY = 62, GX = 16, GY = 12, WH = 56;   // kitchen floor is x 0..12; x 12..16 is the dining room
   const SEAT = 8, DESKZ = 13, MAX_SLOTS = 7, MGR = 6, SPEED = 2.6; // SPEED in tiles/second; slot 6 = the pass (head chef)
@@ -1179,6 +1179,7 @@
 
   // ---------- main ----------
   let lastTicketHits = [], lastBillHits = [], lastSteam = 0;
+  const BOARD = { x: 20, y: 12, w: 90, h: 54 };   // top of the left wall, clear of the door, clock and pans
   const bg = buildBackground();
   const logical = mk(W, H), lc = logical.getContext('2d');
   const labelPt = (e) => { const s = SLOTS[e.slot !== undefined ? e.slot : e.i]; return [sx(s.lab.x, s.lab.y), sy(s.lab.x, s.lab.y, 0) + 6]; };
@@ -1286,6 +1287,7 @@
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(logical, 0, 0, W * S, H * S);
+    if (scene.staff) drawStaff(ctx, BOARD, scene.staff, S, U);
 
     // text overlays
     for (const e of entries) {
@@ -1390,7 +1392,7 @@
   }
 
   window.OfficeIso = {
-    W, H, SLOTS, MAX_SLOTS, render, hitTest, ticketHits: () => lastTicketHits, billHits: () => lastBillHits, steam: () => lastSteam, walkPath, SPOTS, SPEED, STEP: 1,
+    W, H, SLOTS, MAX_SLOTS, render, hitTest, ticketHits: () => lastTicketHits, billHits: () => lastBillHits, BOARD, steam: () => lastSteam, walkPath, SPOTS, SPEED, STEP: 1,
     drawAvatar: F.drawAvatar, GX, GY, isBlocked, project: (x, y, z) => [sx(x, y), sy(x, y, z || 0)],
     deskPoint: (slot) => { const s = SLOTS[slot]; return [sx(s.desk.x, s.desk.y), sy(s.desk.x, s.desk.y, DESKZ)]; },
     TABLES, runnerAt, TABLE, SEATS, MGR, MD, COUNTER, PLANTS, SETS, HEAT, stationSet, tablePoint: () => [sx(TABLE.x, TABLE.y), sy(TABLE.x, TABLE.y, TABLE.h)],
